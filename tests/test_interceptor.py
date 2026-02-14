@@ -37,6 +37,16 @@ def test_restore_object_payload_nested_data() -> None:
     }
 
 
+def test_restore_object_payload_respects_intercept_toggle() -> None:
+    mapper = TokenMapper()
+    mapper.store({"[EMAIL_1]": "alice@example.com"})
+
+    payload = {"user": "[EMAIL_1]"}
+    restored = restore_object_payload(payload, mapper, intercept_tool_arguments=False)
+
+    assert restored == payload
+
+
 def test_restore_text_honors_mapper() -> None:
     mapper = TokenMapper()
     mapper.store({"[EMAIL_1]": "alice@example.com"})
@@ -45,7 +55,7 @@ def test_restore_text_honors_mapper() -> None:
 
 
 def test_scan_and_replace_text_stores_mapping(monkeypatch: object) -> None:
-    async def fake_scan_and_redact(
+    def fake_scan_and_redact(
         text: str,
         *,
         engine: str,

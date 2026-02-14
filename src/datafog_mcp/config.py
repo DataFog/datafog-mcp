@@ -50,6 +50,14 @@ def _coerce_bool(value: str | bool | int | None) -> bool | None:
     return None
 
 
+def _coalesce_bool(*values: Any) -> bool | None:
+    for value in values:
+        coerced = _coerce_bool(value)
+        if coerced is not None:
+            return coerced
+    return None
+
+
 def _coerce_int(value: int | str | None) -> int | None:
     if value is None:
         return None
@@ -153,7 +161,12 @@ class ServerConfig:
             transport=transport or cls().transport,
             port=_coerce_int(port) or cls().port,
             engine=engine,
-            entity_types=_coalesce(cli_entity_types, env_entity_types, file_entity_types, cls().entity_types),
+            entity_types=_coalesce(
+                cli_entity_types,
+                env_entity_types,
+                file_entity_types,
+                cls().entity_types,
+            ),
             strategy=strategy,
             verbose=bool(verbose),
             config_path=config_path,
@@ -171,6 +184,9 @@ class ProxyConfig:
     strategy: str = "token"
     config_path: str | None = None
     verbose: bool = False
+    intercept_tool_arguments: bool = True
+    intercept_tool_responses: bool = True
+    intercept_resources: bool = False
 
     @classmethod
     def from_args(cls, args: Any) -> "ProxyConfig":
@@ -210,12 +226,41 @@ class ProxyConfig:
         if verbose_bool is None:
             verbose_bool = cls().verbose
 
+        intercept_tool_arguments = _coalesce_bool(
+            getattr(args, "intercept_tool_arguments", None),
+            os.getenv("DATAFOG_INTERCEPT_TOOL_ARGUMENTS"),
+            config_file.get("intercept_tool_arguments"),
+            cls().intercept_tool_arguments,
+        )
+
+        intercept_tool_responses = _coalesce_bool(
+            getattr(args, "intercept_tool_responses", None),
+            os.getenv("DATAFOG_INTERCEPT_TOOL_RESPONSES"),
+            config_file.get("intercept_tool_responses"),
+            cls().intercept_tool_responses,
+        )
+
+        intercept_resources = _coalesce_bool(
+            getattr(args, "intercept_resources", None),
+            os.getenv("DATAFOG_INTERCEPT_RESOURCES"),
+            config_file.get("intercept_resources"),
+            cls().intercept_resources,
+        )
+
         return cls(
             target_command=target_command,
             target_args=target_args,
             engine=engine,
-            entity_types=_coalesce(entities, env_entity_types, file_entity_types, cls().entity_types),
+            entity_types=_coalesce(
+                entities,
+                env_entity_types,
+                file_entity_types,
+                cls().entity_types,
+            ),
             strategy=strategy,
             config_path=config_path,
             verbose=verbose_bool,
+            intercept_tool_arguments=bool(intercept_tool_arguments),
+            intercept_tool_responses=bool(intercept_tool_responses),
+            intercept_resources=bool(intercept_resources),
         )

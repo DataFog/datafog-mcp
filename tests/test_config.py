@@ -50,6 +50,9 @@ def test_proxy_config_uses_env_when_not_set() -> None:
         entities="EMAIL,SSN",
         verbose=None,
         config=None,
+        intercept_tool_arguments=None,
+        intercept_tool_responses=None,
+        intercept_resources=None,
     )
     config = ProxyConfig.from_args(args)
 
@@ -58,3 +61,25 @@ def test_proxy_config_uses_env_when_not_set() -> None:
     assert config.engine == "smart"
     assert config.strategy == "token"
     assert config.entity_types == ["EMAIL", "SSN"]
+
+
+def test_proxy_config_merges_advanced_flags_from_env_and_cli(monkeypatch: object) -> None:
+    monkeypatch.setenv("DATAFOG_INTERCEPT_TOOL_RESPONSES", "false")
+    monkeypatch.setenv("DATAFOG_INTERCEPT_RESOURCES", "false")
+
+    args = Namespace(
+        wrap=("python", "server.py"),
+        engine=None,
+        strategy=None,
+        entities=None,
+        verbose=None,
+        config=None,
+        intercept_tool_arguments=True,
+        intercept_tool_responses=None,
+        intercept_resources=None,
+    )
+    config = ProxyConfig.from_args(args)
+
+    assert config.intercept_tool_arguments is True
+    assert config.intercept_tool_responses is False
+    assert config.intercept_resources is False

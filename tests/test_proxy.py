@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from mcp.server.fastmcp import FastMCP
 from fastmcp import Client
@@ -20,7 +21,7 @@ def test_proxy_restores_nested_args_and_redacts_text_output(monkeypatch: object)
         observed["payload"] = payload
         return f"payload={payload}"
 
-    async def fake_scan_and_replace_text(text: str, _mapper: TokenMapper, _config: object) -> str:
+    def fake_scan_and_replace_text(text: str, _mapper: TokenMapper, _config: object) -> str:
         return text.replace("alice@example.com", "[EMAIL_1]")
 
     async def run() -> None:
@@ -62,3 +63,44 @@ def test_proxy_restores_nested_args_and_redacts_text_output(monkeypatch: object)
 
     monkeypatch.setattr(proxy_module, "scan_and_replace_text", fake_scan_and_replace_text)
     asyncio.run(run())
+
+
+def test_proxy_resource_interception_toggle(monkeypatch: object) -> None:
+    target = FastMCP(name="target-server")
+    observed_resource = "https://api.example.com/user?email=alice@example.com"
+
+    @target.tool()
+    def resource_tool() -> dict:
+        return {"uri": observed_resource}
+
+    def fake_scan_and_replace_text(text: str, _mapper: TokenMapper, _config: object) -> str:
+        return text.replace("alice@example.com", "[EMAIL_1]")
+
+    async def run(with_resources: bool) -> dict[str, str]:
+        async with Client(target) as target_client:
+            target_tools = await target_client.list_tools()
+            proxy = FastMCP(name="datafog-proxy")
+            await _register_proxied_tools(
+                proxy=proxy,
+                client=target_client,
+                tools=target_tools,
+                mapper=TokenMapper(),
+                config=ProxyConfig(
+                    target_command="python",
+                    target_args=["-c", "pass"],
+                    intercept_tool_responses=True,
+                    intercept_resources=with_resources,
+                ),
+            )
+
+            async with Client(proxy) as proxy_client:
+                result = await proxy_client.call_tool("resource_tool", {})
+                return json.loads(result.content[0].text)
+
+    monkeypatch.setattr(proxy_module, "scan_and_replace_text", fake_scan_and_replace_text)
+
+    redacted = asyncio.run(run(with_resources=True))
+    passthrough = asyncio.run(run(with_resources=False))
+
+    assert redacted["uri"] == "https://api.example.com/user?email=[EMAIL_1]"
+    assert passthrough["uri"] == observed_resource

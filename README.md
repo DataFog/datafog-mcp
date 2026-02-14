@@ -58,7 +58,23 @@ Supported values:
 
 `datafog-mcp.toml` also supports `engine` and `strategy` under `[server]`.
 
-Mode B also reuses `DATAFOG_ENGINE`, `DATAFOG_ENTITY_TYPES`, and `DATAFOG_STRATEGY` when running proxy mode.
+Mode B also reuses:
+
+- `DATAFOG_ENGINE`
+- `DATAFOG_ENTITY_TYPES`
+- `DATAFOG_STRATEGY`
+- `DATAFOG_INTERCEPT_TOOL_ARGUMENTS`
+- `DATAFOG_INTERCEPT_TOOL_RESPONSES`
+- `DATAFOG_INTERCEPT_RESOURCES`
+
+Mode B also supports these CLI flags:
+
+- `--intercept-tool-arguments/--no-intercept-tool-arguments`
+- `--intercept-tool-responses/--no-intercept-tool-responses`
+- `--intercept-resources/--no-intercept-resources`
+
+`datafog-mcp.toml` also supports `intercept_tool_arguments`,
+`intercept_tool_responses`, and `intercept_resources` under `[proxy]`.
 
 ## Development workflow
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from datafog.engine import scan, scan_and_redact
@@ -11,17 +11,16 @@ from .config import ServerConfig
 
 mcp = FastMCP(
     name="datafog",
-    version="0.1.0",
-    description=(
-        "PII detection and redaction tools. Scan text for emails, SSNs, names, phone"
-        " numbers, and more. Runs locally — no data leaves your machine."
+    instructions=(
+        "PII detection and redaction tools. Scan text for emails, SSNs, names, "
+        "phone numbers, and more. Runs locally — no data leaves your machine."
     ),
 )
 
 
 @dataclass(frozen=True)
 class _ServerRuntime:
-    config: ServerConfig = ServerConfig()
+    config: ServerConfig = field(default_factory=ServerConfig)
 
 
 _RUNTIME = _ServerRuntime()

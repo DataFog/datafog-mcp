@@ -37,6 +37,24 @@ def _parse_args() -> argparse.Namespace:
     proxy_parser.add_argument("--strategy", default=None, choices=["token", "mask", "hash"])
     proxy_parser.add_argument("--config", default=None)
     proxy_parser.add_argument("--verbose", action="store_true", default=None)
+    proxy_parser.add_argument(
+        "--intercept-tool-arguments",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable restoring tool arguments before forwarding to target",
+    )
+    proxy_parser.add_argument(
+        "--intercept-tool-responses",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable redaction of proxied tool responses",
+    )
+    proxy_parser.add_argument(
+        "--intercept-resources",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable resource/content interception in proxied responses",
+    )
     return parser.parse_args()
 
 

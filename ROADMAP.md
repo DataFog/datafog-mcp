@@ -39,9 +39,9 @@
 - ✅ Tool argument restoration (token -> real value).
 - ✅ Tool result interception and redaction for text output.
 - ✅ Token mapping/retrieval logic implemented via `TokenMapper` + `interceptor`.
-- ⏳ Resource interception (files/links/binary payloads) not yet implemented.
+- 🚧 Resource interception (files/links/binary payloads) partially implemented.
 - ⏳ Subprocess lifecycle hardening (shutdown/error handling/retry/resilience) pending.
-- ⏳ Structured output and non-text tool payload coverage to be expanded.
+- 🚧 Structured output and non-text tool payload handling partially expanded.
 - ⏳ Integration tests for proxy wrapping target servers not yet added.
 - ⏳ Proxy release milestone (0.2.0) not complete.
 
@@ -54,8 +54,8 @@
 ## Configuration and Environment
 - ✅ Config file example and parser exists.
 - ✅ Env vars supported for Mode A and Mode B.
-- 🚧 CLI/env/config merge strategy implemented for core values only.
-- ⏳ Full Mode B config surface (interception/passthrough toggles) not yet implemented.
+- ✅ Full Mode B merge strategy implemented for interception/passthrough controls.
+- ✅ Advanced proxy key merge (responses/arguments/resources) implemented.
 
 ## Security and Ops
 - ⏳ Telemetry opt-out / logging policy not implemented.
