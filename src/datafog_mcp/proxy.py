@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import keyword
 import textwrap
 from typing import Any
@@ -47,13 +48,11 @@ async def _intercept_text_output(
         return content
 
     if isinstance(content, types.TextContent):
-        if is_resource_text(content.text) and not config.intercept_resources:
-            return content
-        redacted = scan_and_replace_text(content.text, mapper, config)
-        redacted_text = await redacted if asyncio.iscoroutine(redacted) else redacted
+        text_content = await _intercept_text_output(content.text, mapper, config)
+        text = text_content if isinstance(text_content, str) else str(text_content)
         return types.TextContent(
             type=content.type,
-            text=redacted_text,
+            text=text,
             annotations=content.annotations,
             meta=content.meta,
         )
@@ -61,16 +60,37 @@ async def _intercept_text_output(
         if is_resource_text(content) and not config.intercept_resources:
             return content
         if is_candidate_text(content):
+            normalized = content.strip()
+            if (
+                normalized.startswith("{") and normalized.endswith("}")
+                or normalized.startswith("[") and normalized.endswith("]")
+            ) and not config.intercept_resources:
+                try:
+                    parsed = json.loads(content)
+                    return json.dumps(
+                        await _intercept_text_output(parsed, mapper, config),
+                    )
+                except (TypeError, ValueError):
+                    pass
             redacted = scan_and_replace_text(content, mapper, config)
             return await redacted if asyncio.iscoroutine(redacted) else redacted
         return content
     if isinstance(content, list):
         return [
-            await _intercept_text_output(item, mapper, config) for item in content
+            item
+            if isinstance(item, str)
+            and is_resource_text(item)
+            and not config.intercept_resources
+            else await _intercept_text_output(item, mapper, config)
+            for item in content
         ]
     if isinstance(content, dict):
         return {
-            key: await _intercept_text_output(value, mapper, config)
+            key: value
+            if isinstance(value, str)
+            and is_resource_text(value)
+            and not config.intercept_resources
+            else await _intercept_text_output(value, mapper, config)
             for key, value in content.items()
         }
     if hasattr(content, "model_dump"):
