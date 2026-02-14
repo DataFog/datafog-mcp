@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, Literal
 
 from datafog.engine import scan, scan_and_redact
 from mcp.server.fastmcp import FastMCP
@@ -163,7 +163,15 @@ def run_server(transport: str = "stdio", config: ServerConfig | None = None) -> 
     _LOGGER.debug("starting datafog-mcp server transport=%s", transport)
 
     if config is not None and transport == "streamable-http":
-        mcp.run(transport=transport, port=config.port)
+        transport_literal: Literal["stdio", "sse", "streamable-http"] = "streamable-http"
+        mcp.run(transport=transport_literal, port=config.port)  # type: ignore[call-arg]
         return
 
-    mcp.run(transport=transport)
+    transport_arg: Literal["stdio", "sse", "streamable-http"] = (
+        "streamable-http"
+        if transport == "streamable-http"
+        else "sse"
+        if transport == "sse"
+        else "stdio"
+    )
+    mcp.run(transport=transport_arg)

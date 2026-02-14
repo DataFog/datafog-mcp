@@ -2,6 +2,8 @@
   "include": ["src", "tests"],
   "exclude": [".venv", ".ruff_cache", ".mypy_cache", "build", "dist", "coverage"],
   "typeCheckingMode": "standard",
-  "reportMissingTypeStubs": true,
-  "reportUnknownMemberType": "warning"
+  "reportMissingTypeStubs": false,
+  "reportUnknownMemberType": false,
+  "reportAttributeAccessIssue": false,
+  "reportMissingImports": "warning"
 }

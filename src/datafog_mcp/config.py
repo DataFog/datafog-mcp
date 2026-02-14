@@ -25,9 +25,6 @@ def _normalize_entity_types(value: str | list[str] | None) -> list[str] | None:
     if isinstance(value, list):
         return [item.strip() for item in value if str(item).strip()]
 
-    if not isinstance(value, str):
-        return None
-
     value = value.strip()
     if not value:
         return None

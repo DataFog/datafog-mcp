@@ -93,8 +93,8 @@ def main() -> None:
     if args.command == "proxy":
         from .proxy import run_proxy
 
-        config = ProxyConfig.from_args(args)
-        asyncio.run(run_proxy(config))
+        proxy_config = ProxyConfig.from_args(args)
+        asyncio.run(run_proxy(proxy_config))
 
 
 if __name__ == "__main__":

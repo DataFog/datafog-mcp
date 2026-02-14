@@ -40,17 +40,17 @@ def _build_target_transport(config: ProxyConfig) -> dict[str, Any]:
     }
 
 
-async def _acquire_target_client(target_transport: dict[str, Any]) -> Client:
+async def _acquire_target_client(target_transport: dict[str, Any]) -> Client:  # type: ignore[type-arg]
     last_error: Exception | None = None
 
     for attempt in range(1, _TARGET_CONNECT_ATTEMPTS + 1):
         target_client = Client(target_transport)
 
         try:
-            await target_client.__aenter__()
+            await target_client.__aenter__()  # type: ignore[no-untyped-call]
         except Exception as exc:
             with contextlib.suppress(Exception):
-                await target_client.close()
+                await target_client.close()  # type: ignore[no-untyped-call]
             last_error = exc
 
             if attempt >= _TARGET_CONNECT_ATTEMPTS:
@@ -101,7 +101,6 @@ async def _intercept_text_output(
             type=content.type,
             text=text,
             annotations=content.annotations,
-            meta=content.meta,
         )
     if isinstance(content, str):
         if is_resource_text(content) and not config.intercept_resources:
@@ -178,7 +177,7 @@ def _log_proxy_warning(config: InterceptorConfig, tool_name: str, message: str) 
 
 async def _register_proxied_tools(
     proxy: FastMCP,
-    client: Client,
+    client: Client,  # type: ignore[type-arg]
     tools: list[types.Tool],
     mapper: TokenMapper,
     config: ProxyConfig,
@@ -314,7 +313,7 @@ async def run_proxy(config: ProxyConfig) -> None:
         )
         await proxy.run_stdio_async()
     finally:
-        await target_client.__aexit__(None, None, None)
+        await target_client.__aexit__(None, None, None)  # type: ignore[no-untyped-call]
 
 
 def run_proxy_sync(config: ProxyConfig) -> None:

@@ -34,7 +34,7 @@ async def scan_and_replace_text(text: str, mapper: TokenMapper, config: Intercep
         strategy=config.strategy,
     )
     mapper.store(result.mapping)
-    return result.redacted_text
+    return str(result.redacted_text)
 
 
 def restore_text(text: str, mapper: TokenMapper) -> str:
