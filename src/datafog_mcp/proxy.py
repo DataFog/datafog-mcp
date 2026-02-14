@@ -107,8 +107,10 @@ async def _intercept_text_output(
         if is_candidate_text(content):
             normalized = content.strip()
             if (
-                normalized.startswith("{") and normalized.endswith("}")
-                or normalized.startswith("[") and normalized.endswith("]")
+                normalized.startswith("{")
+                and normalized.endswith("}")
+                or normalized.startswith("[")
+                and normalized.endswith("]")
             ) and not config.intercept_resources:
                 try:
                     parsed = json.loads(content)
@@ -123,18 +125,14 @@ async def _intercept_text_output(
     if isinstance(content, list):
         return [
             item
-            if isinstance(item, str)
-            and is_resource_text(item)
-            and not config.intercept_resources
+            if isinstance(item, str) and is_resource_text(item) and not config.intercept_resources
             else await _intercept_text_output(item, mapper, config)
             for item in content
         ]
     if isinstance(content, dict):
         return {
             key: value
-            if isinstance(value, str)
-            and is_resource_text(value)
-            and not config.intercept_resources
+            if isinstance(value, str) and is_resource_text(value) and not config.intercept_resources
             else await _intercept_text_output(value, mapper, config)
             for key, value in content.items()
         }

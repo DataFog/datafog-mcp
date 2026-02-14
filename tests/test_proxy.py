@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
+from pathlib import Path
 
 import pytest
 from fastmcp import Client
@@ -151,3 +153,96 @@ def test_proxy_invalid_target_command_raises_readable_error(monkeypatch: object)
 
     with pytest.raises(RuntimeError, match="Failed to connect to target MCP server"):
         asyncio.run(run())
+
+
+def test_proxy_end_to_end_subprocess_target(tmp_path: Path) -> None:
+    target_server = tmp_path / "target_server.py"
+    records_path = tmp_path / "records.log"
+
+    target_server.write_text(
+        """\
+from __future__ import annotations
+
+import sys
+
+from mcp.server.fastmcp import FastMCP
+
+
+def _append_record(value: str) -> None:
+    path = sys.argv[1]
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(value + "\\n")
+
+
+mcp = FastMCP(name=\"target-server\")
+
+
+@mcp.tool()
+def emit_email() -> str:
+    return "alice@example.com"
+
+
+@mcp.tool()
+def record_payload(value: str) -> str:
+    _append_record(value)
+    return f\"received:{value}\"
+
+
+@mcp.tool()
+def resource_tool() -> dict[str, str]:
+    return {\"uri\": \"https://api.example.com/user?email=alice@example.com\"}
+
+
+if __name__ == \"__main__\":
+    mcp.run(transport=\"stdio\")
+""",
+        encoding="utf-8",
+    )
+
+    records_path.write_text("", encoding="utf-8")
+
+    proxy_transport = {
+        "mcpServers": {
+            "proxy": {
+                "command": sys.executable,
+                "args": [
+                    "-m",
+                    "datafog_mcp",
+                    "proxy",
+                    "--wrap",
+                    sys.executable,
+                    str(target_server),
+                    str(records_path),
+                ],
+                "transport": "stdio",
+            },
+        },
+    }
+
+    async def run() -> tuple[str, str, str]:
+        async with Client(proxy_transport) as proxy_client:
+            first = await proxy_client.call_tool("emit_email", {})
+            redacted_email = first.content[0].text
+
+            restored = await proxy_client.call_tool(
+                "record_payload",
+                {"value": redacted_email},
+            )
+
+            resource = await proxy_client.call_tool("resource_tool", {})
+
+            return (
+                redacted_email,
+                restored.content[0].text,
+                resource.content[0].text,
+            )
+
+    redacted_email, restored_response, resource_response = asyncio.run(run())
+
+    assert redacted_email == "[EMAIL_1]"
+    assert restored_response == "received:[EMAIL_1]"
+    records = records_path.read_text(encoding="utf-8").splitlines()
+    assert records == ["alice@example.com"]
+
+    payload = json.loads(resource_response)
+    assert payload["uri"] == "https://api.example.com/user?email=alice@example.com"

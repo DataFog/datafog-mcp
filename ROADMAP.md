@@ -42,7 +42,7 @@
 - 🚧 Resource interception (files/links/binary payloads) partially implemented.
 - ✅ Subprocess lifecycle hardening (startup retry + graceful startup failure error path) added.
 - 🚧 Structured output and non-text tool payload handling partially expanded.
-- ⏳ Integration tests for proxy wrapping target servers not yet added.
+- ✅ Integration tests for proxy wrapping actual subprocess target servers added.
 - ⏳ Proxy release milestone (0.2.0) not complete.
 
 ## Interception and Mapping
