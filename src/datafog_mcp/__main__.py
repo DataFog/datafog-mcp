@@ -4,8 +4,8 @@ import argparse
 import asyncio
 
 from . import __version__
+from .config import ProxyConfig, ServerConfig
 from .server import run_server
-from .config import ProxyConfig
 
 
 def _parse_args() -> argparse.Namespace:
@@ -17,11 +17,13 @@ def _parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", help="Mode")
 
     serve_parser = subparsers.add_parser("serve", help="Run as MCP tool server")
-    serve_parser.add_argument("--transport", default="stdio", choices=["stdio", "streamable-http"])
-    serve_parser.add_argument("--port", type=int, default=8000)
-    serve_parser.add_argument("--engine", default="smart")
+    serve_parser.add_argument("--transport", default=None, choices=["stdio", "streamable-http"])
+    serve_parser.add_argument("--port", type=int, default=None)
+    serve_parser.add_argument("--engine", default=None)
+    serve_parser.add_argument("--entities", default=None, help="Comma-separated entity types")
+    serve_parser.add_argument("--strategy", default=None, choices=["token", "mask", "hash"])
     serve_parser.add_argument("--config", default=None)
-    serve_parser.add_argument("--verbose", action="store_true")
+    serve_parser.add_argument("--verbose", action="store_true", default=None)
 
     proxy_parser = subparsers.add_parser("proxy", help="Run as MCP proxy wrapping another server")
     proxy_parser.add_argument(
@@ -30,11 +32,11 @@ def _parse_args() -> argparse.Namespace:
         required=True,
         help="Command and args of the target MCP server to wrap",
     )
-    proxy_parser.add_argument("--engine", default="smart")
+    proxy_parser.add_argument("--engine", default=None)
     proxy_parser.add_argument("--entities", default=None, help="Comma-separated entity types")
-    proxy_parser.add_argument("--strategy", default="token", choices=["token", "mask", "hash"])
+    proxy_parser.add_argument("--strategy", default=None, choices=["token", "mask", "hash"])
     proxy_parser.add_argument("--config", default=None)
-    proxy_parser.add_argument("--verbose", action="store_true")
+    proxy_parser.add_argument("--verbose", action="store_true", default=None)
     return parser.parse_args()
 
 
@@ -42,7 +44,8 @@ def main() -> None:
     args = _parse_args()
 
     if args.command in (None, "serve"):
-        run_server(transport=getattr(args, "transport", "stdio"))
+        config = ServerConfig.from_args(args)
+        run_server(transport=config.transport, config=config)
         return
 
     if args.command == "proxy":

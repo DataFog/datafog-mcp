@@ -17,13 +17,32 @@ uv sync --group dev
 
 # run the MCP server
 uv run datafog-mcp
-# or
+# or explicit
 uv run datafog-mcp serve --transport stdio
+# streamable-http transport
+uv run datafog-mcp serve --transport streamable-http --port 8000
 ```
 
 ## Dependency baseline
 
 The project starts with `datafog==4.3.0`.
+
+## Runtime configuration
+
+Mode A reads configuration from (in precedence order):
+1) CLI arguments
+2) `DATAFOG_*` env vars
+3) `datafog-mcp.toml` if present
+
+Supported values:
+
+- `DATAFOG_ENGINE`
+- `DATAFOG_ENTITY_TYPES`
+- `DATAFOG_STRATEGY`
+- `DATAFOG_VERBOSE`
+- `DATAFOG_NO_TELEMETRY`
+
+`datafog-mcp.toml` also supports `engine` and `strategy` under `[server]`.
 
 ## Development workflow
 
