@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "datafog-mcp"
+version = "0.1.0"
+description = "MCP server for PII detection and redaction — the privacy layer for AI agents"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Sid Mohan", email = "hi@datafog.ai" }]
+keywords = ["mcp", "pii", "privacy", "ai", "agents", "redaction"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "datafog==4.3.0",
+    "mcp>=1.2.0",
+    "fastmcp>=2.14,<3",
+]
+
+[project.urls]
+Homepage = "https://datafog.ai"
+Repository = "https://github.com/DataFog/datafog-mcp"
+Documentation = "https://docs.datafog.ai/mcp"
+
+[project.scripts]
+datafog-mcp = "datafog_mcp.__main__:main"
