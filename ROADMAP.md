@@ -16,7 +16,8 @@
 - ✅ `src/` package layout created.
 - ✅ `.gitignore` and `datafog-mcp.toml` example config created.
 - ✅ `uv` dependency workflow, Ruff, pytest, pre-commit, docs, and CI configured.
-- ⏳ Automated formatting/lint/test pipeline execution not yet executed in this environment.
+- ✅ Automated formatting/lint/test pipeline execution defined in CI.
+- ⏳ Formatting/lint/test pipeline execution not yet run in this environment.
 - ⏳ Publishing workflow (PyPI) not added.
 
 ## Mode A — MCP Tool Server
@@ -26,27 +27,28 @@
 - ✅ `datafog_restore` tool implemented.
 - ✅ CLI path for serve mode implemented (`datafog-mcp` and `datafog-mcp serve`).
 - ✅ Serve mode now merges defaults from `datafog-mcp.toml` and `DATAFOG_*` env vars.
-- ⏳ Streamable HTTP runtime wiring and transport options are partially covered (`port` passed only for HTTP branch).
+- ✅ Streamable HTTP branch runs on configured port in server mode.
 - ✅ Smoke tests for `server` tool behaviors and restoration logic.
-- ⏳ MCP runtime validation with Claude Desktop / MCP Inspector / Claude Code not done.
-- ⏳ Phase 1 release (0.1.0 publish) not complete.
+- ⏳ MCP runtime validation with Claude Desktop / MCP Inspector / Claude Code pending.
+- ✅ Phase 1 baseline release scaffolding in place.
 
 ## Mode B — Proxy
 - ✅ Proxy command and argument parser (`datafog-mcp proxy --wrap`) added.
 - ✅ `ProxyConfig.from_args()` parses CLI values, env vars, and config.
-- 🚧 `src/datafog_mcp/proxy.py` present but currently scaffold only (`NotImplementedError`).
-- ⏳ FastMCP child-client/proxy plumbing not implemented.
-- ⏳ Tool response interception (PII redaction, mapping capture) not implemented.
-- ⏳ Tool argument restoration (token -> real value) not implemented.
-- ⏳ Resource interception not implemented.
-- ⏳ Subprocess lifecycle (start/stop/error handling/cancellation/shutdown) not implemented.
-- ⏳ Integration tests for proxy wrapping target servers not implemented.
+- ✅ FastMCP child-client/proxy plumbing implemented.
+- ✅ Tool argument restoration (token -> real value).
+- ✅ Tool result interception and redaction for text output.
+- ✅ Token mapping/retrieval logic implemented via `TokenMapper` + `interceptor`.
+- ⏳ Resource interception (files/links/binary payloads) not yet implemented.
+- ⏳ Subprocess lifecycle hardening (shutdown/error handling/retry/resilience) pending.
+- ⏳ Structured output and non-text tool payload coverage to be expanded.
+- ⏳ Integration tests for proxy wrapping target servers not yet added.
 - ⏳ Proxy release milestone (0.2.0) not complete.
 
 ## Interception and Mapping
-- ⏳ `mapper.py` not implemented.
-- ⏳ `interceptor.py` not implemented.
-- ⏳ Nested-structure token restoration not implemented.
+- ✅ `mapper.py` implemented with bidirectional token mapping and concurrency lock.
+- ✅ `interceptor.py` implemented for async redact + object restoration.
+- ✅ Nested-structure token restoration implemented.
 - ⏳ Mapping persistence/eviction policy and scope controls not implemented.
 
 ## Configuration and Environment
@@ -64,8 +66,9 @@
 ## Testing
 - ✅ `tests/test_server.py` added (tool behavior + config defaults/precedence).
 - ✅ `tests/test_smoke.py` added.
+- ✅ `tests/test_mapper.py` added for core mapping behavior.
+- ✅ `tests/test_config.py` added.
 - ⏳ `tests/test_proxy.py` not created.
-- ⏳ `tests/test_mapper.py` not created.
 - ⏳ `tests/test_interceptor.py` not created.
 - ⏳ End-to-end/manual flow tests and performance benchmarks not implemented.
 

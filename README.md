@@ -23,6 +23,20 @@ uv run datafog-mcp serve --transport stdio
 uv run datafog-mcp serve --transport streamable-http --port 8000
 ```
 
+## Proxy mode (Mode B)
+
+`datafog-mcp` can proxy another MCP server and redact/restores PII in transit:
+
+```bash
+uv run datafog-mcp proxy --wrap python server.py --arg value
+```
+
+When enabled, the proxy will:
+
+- Restore redacted tokens in inbound tool arguments before forwarding to the target server.
+- Apply `datafog.scan_and_redact` to outbound text outputs.
+- Maintain a shared session mapping so chained tool calls can reuse token restoration.
+
 ## Dependency baseline
 
 The project starts with `datafog==4.3.0`.
@@ -43,6 +57,8 @@ Supported values:
 - `DATAFOG_NO_TELEMETRY`
 
 `datafog-mcp.toml` also supports `engine` and `strategy` under `[server]`.
+
+Mode B also reuses `DATAFOG_ENGINE`, `DATAFOG_ENTITY_TYPES`, and `DATAFOG_STRATEGY` when running proxy mode.
 
 ## Development workflow
 
@@ -87,6 +103,8 @@ datafog-mcp/
 │   ├── config.py
 │   ├── proxy.py
 │   ├── server.py
+│   ├── interceptor.py
+│   ├── mapper.py
 ├── tests/
 ├── docs/
 ├── datafog-mcp.toml
