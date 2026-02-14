@@ -68,8 +68,8 @@
 - ✅ `tests/test_smoke.py` added.
 - ✅ `tests/test_mapper.py` added for core mapping behavior.
 - ✅ `tests/test_config.py` added.
-- ⏳ `tests/test_proxy.py` not created.
-- ⏳ `tests/test_interceptor.py` not created.
+- ✅ `tests/test_proxy.py` added for proxied tool argument restore + output redaction.
+- ✅ `tests/test_interceptor.py` added for redaction/restoration helpers.
 - ⏳ End-to-end/manual flow tests and performance benchmarks not implemented.
 
 ## Packaging & Release

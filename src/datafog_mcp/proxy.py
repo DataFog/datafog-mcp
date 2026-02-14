@@ -77,12 +77,23 @@ async def _register_proxied_tools(
                     await _intercept_text_output(item, mapper, interceptor_config)
                     for item in result.content
                 ]
-            if result.structuredContent is not None:
-                result.structuredContent = await _intercept_text_output(
-                    result.structuredContent,
+
+            structured_content = getattr(result, "structured_content", None)
+            if structured_content is not None:
+                result.structured_content = await _intercept_text_output(
+                    structured_content,
                     mapper,
                     interceptor_config,
                 )
+
+            structured_content_camel = getattr(result, "structuredContent", None)
+            if structured_content_camel is not None:
+                result.structuredContent = await _intercept_text_output(
+                    structured_content_camel,
+                    mapper,
+                    interceptor_config,
+                )
+
             return result
 
         proxy.tool(
