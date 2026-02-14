@@ -18,7 +18,7 @@
 - ✅ `uv` dependency workflow, Ruff, pytest, pre-commit, docs, and CI configured.
 - ✅ Automated formatting/lint/test pipeline execution defined in CI.
 - ✅ Formatting/lint/test pipeline execution run locally (`ruff check`, `ruff format`, `mypy`, `pyright`, `pytest`).
-- ⏳ Publishing workflow (PyPI) not added.
+- ✅ Publishing workflow (PyPI) added.
 
 ## Mode A — MCP Tool Server
 - ✅ `FastMCP` server instance with tool definitions in `src/datafog_mcp/server.py`.
@@ -43,7 +43,7 @@
 - ✅ Subprocess lifecycle hardening (startup retry + graceful startup failure error path) added.
 - 🚧 Structured output and non-text tool payload handling partially expanded.
 - ✅ Integration tests for proxy wrapping actual subprocess target servers added.
-- ⏳ Proxy release milestone (0.2.0) not complete.
+- ✅ Proxy release milestone (0.2.0) completed.
 
 ## Interception and Mapping
 - ✅ `mapper.py` implemented with bidirectional token mapping and concurrency lock.
