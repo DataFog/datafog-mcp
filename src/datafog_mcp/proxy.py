@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import keyword
 import textwrap
 from typing import Any
 
+from fastmcp import Client
 from mcp import types
 from mcp.server.fastmcp import FastMCP
-from fastmcp import Client
 
 from .config import ProxyConfig
 from .interceptor import (
@@ -19,6 +20,50 @@ from .interceptor import (
     scan_and_replace_text,
 )
 from .mapper import TokenMapper
+
+_TARGET_CONNECT_ATTEMPTS = 3
+_TARGET_CONNECT_BASE_DELAY_SECONDS = 0.2
+
+
+def _build_target_transport(config: ProxyConfig) -> dict[str, Any]:
+    target_args = [config.target_command, *(config.target_args or [])]
+    return {
+        "mcpServers": {
+            "target": {
+                "command": target_args[0],
+                "args": target_args[1:],
+                "transport": "stdio",
+            },
+        },
+    }
+
+
+async def _acquire_target_client(target_transport: dict[str, Any]) -> Client:
+    last_error: Exception | None = None
+
+    for attempt in range(1, _TARGET_CONNECT_ATTEMPTS + 1):
+        target_client = Client(target_transport)
+
+        try:
+            await target_client.__aenter__()
+        except Exception as exc:
+            with contextlib.suppress(Exception):
+                await target_client.close()
+            last_error = exc
+
+            if attempt >= _TARGET_CONNECT_ATTEMPTS:
+                break
+
+            delay = _TARGET_CONNECT_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+            await asyncio.sleep(delay)
+            continue
+
+        return target_client
+
+    raise RuntimeError(
+        "Failed to connect to target MCP server. "
+        "Check that the command in --wrap is valid and reachable.",
+    ) from last_error
 
 
 def _intercept_args(
@@ -134,7 +179,10 @@ async def _register_proxied_tools(
                     mapper,
                     interceptor_config,
                 )
-                call_result: Any = await client.call_tool(_tool_name, restored)
+                try:
+                    call_result: Any = await client.call_tool(_tool_name, restored)
+                except Exception as exc:
+                    return "Upstream tool call failed: " + str(exc)
 
                 content = None
                 if call_result.content is not None:
@@ -207,22 +255,13 @@ async def run_proxy(config: ProxyConfig) -> None:
     if not target_command:
         raise ValueError("Proxy mode requires --wrap <command> [args...]")
 
-    target_args = [target_command, *(config.target_args or [])]
-    target_transport = {
-        "mcpServers": {
-            "target": {
-                "command": target_args[0],
-                "args": target_args[1:],
-                "transport": "stdio",
-            },
-        },
-    }
+    target_transport = _build_target_transport(config)
 
     mapper = TokenMapper()
-    target_client = Client(target_transport)
     proxy = FastMCP(name="datafog-proxy")
 
-    async with target_client:
+    target_client = await _acquire_target_client(target_transport)
+    try:
         target_tools = await target_client.list_tools()
         await _register_proxied_tools(
             proxy,
@@ -232,6 +271,8 @@ async def run_proxy(config: ProxyConfig) -> None:
             config,
         )
         await proxy.run_stdio_async()
+    finally:
+        await target_client.__aexit__(None, None, None)
 
 
 def run_proxy_sync(config: ProxyConfig) -> None:

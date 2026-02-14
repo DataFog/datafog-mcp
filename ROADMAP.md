@@ -40,7 +40,7 @@
 - ✅ Tool result interception and redaction for text output.
 - ✅ Token mapping/retrieval logic implemented via `TokenMapper` + `interceptor`.
 - 🚧 Resource interception (files/links/binary payloads) partially implemented.
-- ⏳ Subprocess lifecycle hardening (shutdown/error handling/retry/resilience) pending.
+- ✅ Subprocess lifecycle hardening (startup retry + graceful startup failure error path) added.
 - 🚧 Structured output and non-text tool payload handling partially expanded.
 - ⏳ Integration tests for proxy wrapping target servers not yet added.
 - ⏳ Proxy release milestone (0.2.0) not complete.
