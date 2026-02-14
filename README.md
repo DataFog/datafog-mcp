@@ -1,27 +1,81 @@
 # datafog-mcp
 
-Python MCP server for local PII detection and redaction.
+`datafog-mcp` is a Python MCP server that adds local PII scan and redaction tooling for AI agents.
 
-## What’s included
+## Prerequisites
 
-- Mode A: MCP tool server with `datafog_scan`, `datafog_redact`, and `datafog_restore`.
-- CLI entrypoint: `datafog-mcp` and `python -m datafog_mcp`.
-- Proxy mode scaffold in place (next phase).
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) (recommended package manager)
 
-## Install
+## Install and run
 
-```bash
-pip install -e .
-```
-
-## Run
+Use `uv` as the primary developer/deployment workflow.
 
 ```bash
-datafog-mcp
+# bootstrap editable install with dev dependencies
+uv sync --group dev
+
+# run the MCP server
+uv run datafog-mcp
 # or
-datafog-mcp serve --transport stdio
+uv run datafog-mcp serve --transport stdio
 ```
 
-## Dependencies
+## Dependency baseline
 
-Starts from `datafog==4.3.0`.
+The project starts with `datafog==4.3.0`.
+
+## Development workflow
+
+### Setup
+
+```bash
+uv sync --group dev --group docs
+uv run pre-commit install
+```
+
+### Code quality
+
+```bash
+uv run ruff check .
+uv run ruff format .
+uv run mypy
+uv run pyright
+uv run pytest
+```
+
+### Pre-commit
+
+```bash
+pre-commit run --all-files
+```
+
+## Documentation
+
+```bash
+uv run mkdocs serve
+```
+
+Then open <http://127.0.0.1:8000>.
+
+## Repository layout
+
+```text
+datafog-mcp/
+├── src/datafog_mcp/
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── config.py
+│   ├── proxy.py
+│   ├── server.py
+├── tests/
+├── docs/
+├── datafog-mcp.toml
+├── pyproject.toml
+├── README.md
+├── ROADMAP.md
+```
+
+## Roadmap and spec
+
+See `ROADMAP.md` for implementation tracking against the product spec.

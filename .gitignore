@@ -3,5 +3,17 @@ __pycache__/
 *.egg-info/
 .env
 .venv/
+.venv*/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .coverage
+coverage.xml
+dist/
+build/
+*.whl
+*.tar.gz
+.nox/
+.cache/
+.history/
+.DS_Store

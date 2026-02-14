@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -23,6 +23,47 @@ dependencies = [
     "fastmcp>=2.14,<3",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+    "mypy>=1.11.0",
+    "pyright>=1.1.398",
+    "pre-commit>=3.8.0",
+    "coverage>=7.6.0",
+]
+
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.25.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+    "mypy>=1.11.0",
+    "pyright>=1.1.398",
+    "pre-commit>=3.8.0",
+    "coverage>=7.6.0",
+]
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.25.0",
+]
+ci = [
+    "ruff>=0.8.0",
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+    "mypy>=1.11.0",
+    "pyright>=1.1.398",
+    "coverage>=7.6.0",
+]
+
 [project.urls]
 Homepage = "https://datafog.ai"
 Repository = "https://github.com/DataFog/datafog-mcp"
@@ -30,3 +71,76 @@ Documentation = "https://docs.datafog.ai/mcp"
 
 [project.scripts]
 datafog-mcp = "datafog_mcp.__main__:main"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/datafog_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "B",
+  "UP",
+  "SIM",
+]
+ignore = []
+fixable = ["ALL"]
+unfixable = []
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_configs = true
+warn_return_any = true
+warn_unused_ignores = true
+warn_unreachable = true
+disallow_incomplete_defs = true
+disallow_any_unimported = false
+ignore_missing_imports = true
+exclude = ["tests", "build", "dist", ".venv", ".pytest_cache"]
+
+[tool.pyright]
+include = ["src", "tests"]
+exclude = [".venv", ".ruff_cache", ".mypy_cache", "build", "dist", "coverage" ]
+typeCheckingMode = "standard"
+reportMissingTypeStubs = true
+
+[tool.pytest.ini_options]
+addopts = [
+  "-q",
+  "--strict-markers",
+  "--disable-warnings",
+  "--cov=src/datafog_mcp",
+  "--cov-report=term-missing",
+  "--cov-report=xml:coverage.xml",
+]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["src/datafog_mcp"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true
+
+[tool.uv]
+index-url = "https://pypi.org/simple"
