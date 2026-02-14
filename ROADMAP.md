@@ -76,7 +76,7 @@
 ## Packaging & Release
 - ✅ `datafog-mcp` command entrypoint configured.
 - ✅ `uv.lock` generated.
-- ⏳ Versioning strategy remains at `0.1.0` scaffold.
+- ✅ Versioning strategy set to `0.2.0` with initial changelog.
 - ✅ Package build validation in CI (`uv build`).
 - ⏳ Documentation for modes, config matrix, and proxy examples not fully aligned with future proxy features.
 
@@ -89,4 +89,4 @@
 6. ✅ Add TOML + env config merge for advanced Mode B keys and passthrough controls.
 7. ✅ Add logging/telemetry controls and hardening.
 8. ✅ Add resource interception as optional Mode B+ feature.
-9. ✅ Execute release milestones 0.1.0 / 0.2.0 / 0.3.0+ as planned.
+9. ✅ Execute release milestones 0.1.0 / 0.2.0 as planned.
