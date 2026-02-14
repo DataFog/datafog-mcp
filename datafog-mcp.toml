@@ -3,6 +3,8 @@ engine = "smart"
 strategy = "token"
 # entity_types = ["EMAIL", "SSN", "CREDIT_CARD"]
 # verbose = true
+# no_telemetry = false
+# log_redactions = false
 # transport = "stdio"
 # port = 8000
 
@@ -10,3 +12,5 @@ strategy = "token"
 intercept_tool_responses = true
 intercept_tool_arguments = true
 intercept_resources = false
+# log_redactions = false
+# no_telemetry = false

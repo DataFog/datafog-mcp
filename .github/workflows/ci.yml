@@ -47,6 +47,9 @@ jobs:
       - name: Run tests
         run: uv run pytest
 
+      - name: Build package
+        run: uv build
+
       - name: Generate coverage report
         run: uv run pytest --cov=src/datafog_mcp --cov-report=xml
 

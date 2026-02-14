@@ -109,6 +109,7 @@ class ServerConfig:
     strategy: str = "token"
     verbose: bool = False
     no_telemetry: bool = False
+    log_redactions: bool = False
     config_path: str | None = None
 
     @classmethod
@@ -148,6 +149,12 @@ class ServerConfig:
             cls().no_telemetry,
         )
 
+        log_redactions = _coalesce_bool(
+            getattr(args, "log_redactions", None),
+            os.getenv("DATAFOG_LOG_REDACTIONS"),
+            cls().log_redactions,
+        )
+
         transport = _coalesce(
             getattr(args, "transport", None),
             config_file.get("transport"),
@@ -178,6 +185,7 @@ class ServerConfig:
             strategy=strategy,
             verbose=bool(verbose),
             no_telemetry=bool(no_telemetry),
+            log_redactions=bool(log_redactions),
             config_path=config_path,
         )
 
@@ -192,6 +200,7 @@ class ProxyConfig:
     entity_types: list[str] | None = None
     strategy: str = "token"
     no_telemetry: bool = False
+    log_redactions: bool = False
     config_path: str | None = None
     verbose: bool = False
     intercept_tool_arguments: bool = True
@@ -242,6 +251,12 @@ class ProxyConfig:
             cls().no_telemetry,
         )
 
+        log_redactions = _coalesce_bool(
+            getattr(args, "log_redactions", None),
+            os.getenv("DATAFOG_LOG_REDACTIONS"),
+            cls().log_redactions,
+        )
+
         intercept_tool_arguments = _coalesce_bool(
             getattr(args, "intercept_tool_arguments", None),
             os.getenv("DATAFOG_INTERCEPT_TOOL_ARGUMENTS"),
@@ -277,6 +292,7 @@ class ProxyConfig:
             config_path=config_path,
             verbose=verbose_bool,
             no_telemetry=bool(no_telemetry),
+            log_redactions=bool(log_redactions),
             intercept_tool_arguments=bool(intercept_tool_arguments),
             intercept_tool_responses=bool(intercept_tool_responses),
             intercept_resources=bool(intercept_resources),

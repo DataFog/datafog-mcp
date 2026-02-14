@@ -30,6 +30,12 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Enable/disable datafog telemetry calls",
     )
+    serve_parser.add_argument(
+        "--log-redactions",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable redaction event logging",
+    )
 
     proxy_parser = subparsers.add_parser("proxy", help="Run as MCP proxy wrapping another server")
     proxy_parser.add_argument(
@@ -48,6 +54,12 @@ def _parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Enable/disable datafog telemetry calls",
+    )
+    proxy_parser.add_argument(
+        "--log-redactions",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable redaction event logging",
     )
     proxy_parser.add_argument(
         "--intercept-tool-arguments",

@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import keyword
+import logging
 import textwrap
 from typing import Any
 
@@ -23,6 +24,7 @@ from .mapper import TokenMapper
 
 _TARGET_CONNECT_ATTEMPTS = 3
 _TARGET_CONNECT_BASE_DELAY_SECONDS = 0.2
+_LOGGER = logging.getLogger("datafog_mcp")
 
 
 def _build_target_transport(config: ProxyConfig) -> dict[str, Any]:
@@ -146,6 +148,34 @@ async def _intercept_text_output(
     return content
 
 
+async def _sanitize_error(
+    error: Exception,
+    mapper: TokenMapper,
+    config: InterceptorConfig,
+) -> str:
+    message = str(error) or "Tool call failed"
+    try:
+        redacted = scan_and_replace_text(message, mapper, config)
+        return await redacted if asyncio.iscoroutine(redacted) else redacted
+    except Exception:
+        return "Tool call failed"
+
+
+def _log_proxy_redaction(config: InterceptorConfig, mapper: TokenMapper, tool_name: str) -> None:
+    if not config.log_redactions or not config.intercept_tool_responses:
+        return
+    if not mapper.mapping_table:
+        return
+
+    _LOGGER.info("%s: proxied content redacted (%s mappings)", tool_name, len(mapper.mapping_table))
+
+
+def _log_proxy_warning(config: InterceptorConfig, tool_name: str, message: str) -> None:
+    if not config.log_redactions:
+        return
+    _LOGGER.warning("Tool proxy failure (%s): %s", tool_name, message)
+
+
 async def _register_proxied_tools(
     proxy: FastMCP,
     client: Client,
@@ -160,6 +190,7 @@ async def _register_proxied_tools(
         intercept_tool_arguments=config.intercept_tool_arguments,
         intercept_tool_responses=config.intercept_tool_responses,
         intercept_resources=config.intercept_resources,
+        log_redactions=config.log_redactions,
     )
 
     def _is_valid_argument_name(name: str) -> bool:
@@ -180,7 +211,9 @@ async def _register_proxied_tools(
                 try:
                     call_result: Any = await client.call_tool(_tool_name, restored)
                 except Exception as exc:
-                    return "Upstream tool call failed: " + str(exc)
+                    message = await _sanitize_error(exc, mapper, interceptor_config)
+                    _log_proxy_warning(interceptor_config, _tool_name, message)
+                    return "Upstream tool call failed: " + message
 
                 content = None
                 if call_result.content is not None:
@@ -211,6 +244,7 @@ async def _register_proxied_tools(
 
                 if content is not None:
                     if len(content) == 1 and isinstance(content[0], types.TextContent):
+                        _log_proxy_redaction(interceptor_config, mapper, _tool_name)
                         return content[0].text
                     return content
                 return ""
@@ -224,7 +258,11 @@ async def _register_proxied_tools(
             "types": types,
             "_intercept_args": _intercept_args,
             "_intercept_text_output": _intercept_text_output,
+            "_sanitize_error": _sanitize_error,
+            "_log_proxy_redaction": _log_proxy_redaction,
+            "_log_proxy_warning": _log_proxy_warning,
             "_tool_name": tool_name,
+            "_LOGGER": _LOGGER,
         }
         exec(handler_source, namespace)
         return namespace["_tool_handler"]
@@ -254,6 +292,11 @@ async def run_proxy(config: ProxyConfig) -> None:
         raise ValueError("Proxy mode requires --wrap <command> [args...]")
 
     _set_telemetry_env(config.no_telemetry)
+    if config.verbose or config.log_redactions:
+        _LOGGER.setLevel(logging.INFO)
+    else:
+        _LOGGER.setLevel(logging.CRITICAL)
+
     target_transport = _build_target_transport(config)
 
     mapper = TokenMapper()

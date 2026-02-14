@@ -115,7 +115,7 @@ def test_proxy_tool_call_failure_is_returned_as_text() -> None:
 
     @target.tool()
     def failing_tool() -> str:
-        raise ValueError("boom")
+        raise ValueError("user email is alice@example.com")
 
     async def run() -> str:
         async with Client(target) as target_client:
@@ -138,7 +138,8 @@ def test_proxy_tool_call_failure_is_returned_as_text() -> None:
 
     message = asyncio.run(run())
     assert "Upstream tool call failed" in message
-    assert "boom" in message
+    assert "[EMAIL_1]" in message
+    assert "alice@example.com" not in message
 
 
 def test_proxy_invalid_target_command_raises_readable_error(monkeypatch: object) -> None:

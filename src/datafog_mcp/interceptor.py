@@ -17,6 +17,7 @@ class InterceptorConfig:
     intercept_tool_arguments: bool = True
     intercept_tool_responses: bool = True
     intercept_resources: bool = False
+    log_redactions: bool = False
 
 
 async def scan_and_replace_text(text: str, mapper: TokenMapper, config: InterceptorConfig) -> str:

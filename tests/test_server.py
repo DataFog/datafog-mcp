@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 import os
 from types import SimpleNamespace
+
+import pytest
 
 from datafog_mcp import server
 from datafog_mcp.config import ServerConfig
@@ -110,3 +113,43 @@ def test_run_server_applies_telemetry_env(monkeypatch: object) -> None:
 
     assert os.environ["DATAFOG_NO_TELEMETRY"] == "1"
     assert "kwargs" in called
+
+
+def test_datafog_redact_logs_when_enabled(
+    monkeypatch: object,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    called = {}
+
+    def fake_scan_and_redact(
+        text: str,
+        *,
+        engine: str = "smart",
+        entity_types: list[str] | None = None,
+        strategy: str = "token",
+    ):
+        called["engine"] = engine
+        return SimpleNamespace(
+            redacted_text="[EMAIL_1]",
+            mapping={"[EMAIL_1]": "alice@example.com"},
+            entities=[
+                SimpleNamespace(
+                    type="EMAIL",
+                    text="alice@example.com",
+                    start=0,
+                    end=16,
+                    confidence=0.99,
+                )
+            ],
+            engine_used=engine,
+        )
+
+    monkeypatch.setattr(server, "scan_and_redact", fake_scan_and_redact)
+    server.configure_server(ServerConfig(log_redactions=True))
+
+    with caplog.at_level(logging.INFO, logger="datafog_mcp"):
+        result = server.datafog_redact("alice@example.com")
+
+    assert result["redacted_text"] == "[EMAIL_1]"
+    assert called["engine"] == "smart"
+    assert any("datafog_redact called" in record.getMessage() for record in caplog.records)

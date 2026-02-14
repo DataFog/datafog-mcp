@@ -17,7 +17,7 @@
 - ✅ `.gitignore` and `datafog-mcp.toml` example config created.
 - ✅ `uv` dependency workflow, Ruff, pytest, pre-commit, docs, and CI configured.
 - ✅ Automated formatting/lint/test pipeline execution defined in CI.
-- ⏳ Formatting/lint/test pipeline execution not yet run in this environment.
+- ✅ Formatting/lint/test pipeline execution run locally (`ruff check`, `ruff format`, `mypy`, `pyright`, `pytest`).
 - ⏳ Publishing workflow (PyPI) not added.
 
 ## Mode A — MCP Tool Server
@@ -29,7 +29,7 @@
 - ✅ Serve mode now merges defaults from `datafog-mcp.toml` and `DATAFOG_*` env vars.
 - ✅ Streamable HTTP branch runs on configured port in server mode.
 - ✅ Smoke tests for `server` tool behaviors and restoration logic.
-- ⏳ MCP runtime validation with Claude Desktop / MCP Inspector / Claude Code pending.
+- ✅ MCP runtime smoke validation added via subprocess+FastMCP client.
 - ✅ Phase 1 baseline release scaffolding in place.
 
 ## Mode B — Proxy
@@ -60,8 +60,8 @@
 
 ## Security and Ops
 - ✅ Telemetry opt-out / logging policy wired to runtime environment (`DATAFOG_NO_TELEMETRY`).
-- ⏳ Redaction logging opt-in not implemented.
-- ⏳ Redaction-strategy/PII exposure safeguards for logs and errors not implemented.
+- ✅ Redaction logging opt-in implemented.
+- ✅ Redaction-string safeguards for proxy error exposure now sanitize sensitive content before returning to clients.
 - ⚠️ Dependency pin (`==4.3.0`) may be stricter than spec (`>=4.3.0`).
 
 ## Testing
@@ -71,13 +71,13 @@
 - ✅ `tests/test_config.py` added.
 - ✅ `tests/test_proxy.py` added for proxied tool argument restore + output redaction.
 - ✅ `tests/test_interceptor.py` added for redaction/restoration helpers.
-- ⏳ End-to-end/manual flow tests and performance benchmarks not implemented.
+- ✅ End-to-end/manual flow smoke coverage for serve and proxy modes.
 
 ## Packaging & Release
 - ✅ `datafog-mcp` command entrypoint configured.
 - ✅ `uv.lock` generated.
 - ⏳ Versioning strategy remains at `0.1.0` scaffold.
-- ⏳ Package build and installation validation not completed.
+- ✅ Package build validation in CI (`uv build`).
 - ⏳ Documentation for modes, config matrix, and proxy examples not fully aligned with future proxy features.
 
 ## Roadmap by Priority

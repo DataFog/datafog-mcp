@@ -55,6 +55,7 @@ Supported values:
 - `DATAFOG_STRATEGY`
 - `DATAFOG_VERBOSE`
 - `DATAFOG_NO_TELEMETRY`
+- `DATAFOG_LOG_REDACTIONS`
 
 `datafog-mcp.toml` also supports `engine` and `strategy` under `[server]`.
 
@@ -75,6 +76,10 @@ Mode B also supports these CLI flags:
 
 `datafog-mcp.toml` also supports `intercept_tool_arguments`,
 `intercept_tool_responses`, and `intercept_resources` under `[proxy]`.
+
+Mode A and Mode B also support:
+- `--log-redactions/--no-log-redactions` (maps to `DATAFOG_LOG_REDACTIONS`) to opt in to redaction log events.
+- `--no-telemetry/--telemetry` (maps to `DATAFOG_NO_TELEMETRY`) to disable datafog telemetry calls.
 
 ## Development workflow
 

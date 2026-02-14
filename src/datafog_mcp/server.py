@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -15,6 +16,8 @@ mcp = FastMCP(
         "phone numbers, and more. Runs locally — no data leaves your machine."
     ),
 )
+
+_LOGGER = logging.getLogger("datafog_mcp")
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,22 @@ def _run_scan(text: str, *, engine: str | None, entity_types: list[str] | None) 
     )
 
 
+def _log_event(entity_count: int, engine: str, strategy: str | None = None) -> None:
+    if not _RUNTIME.config.log_redactions:
+        return
+
+    if strategy is not None:
+        _LOGGER.info(
+            "datafog_redact called (engine=%s, strategy=%s, entities=%s)",
+            engine,
+            strategy,
+            entity_count,
+        )
+        return
+
+    _LOGGER.info("datafog_scan called (engine=%s, entities=%s)", engine, entity_count)
+
+
 def _run_scan_and_redact(
     text: str,
     *,
@@ -76,6 +95,7 @@ def datafog_scan(
     """Scan text for PII and return detected entities."""
 
     result = _run_scan(text=text, engine=engine, entity_types=entity_types)
+    _log_event(len(result.entities), _resolve_engine(engine))
     return {
         "entity_count": len(result.entities),
         "entities": [
@@ -107,6 +127,11 @@ def datafog_redact(
         entity_types=entity_types,
         strategy=strategy,
     )
+    _log_event(
+        len(result.entities),
+        _resolve_engine(engine),
+        _resolve_strategy(strategy),
+    )
 
     return {
         "redacted_text": result.redacted_text,
@@ -130,6 +155,12 @@ def run_server(transport: str = "stdio", config: ServerConfig | None = None) -> 
         configure_server(config)
         transport = config.transport
         _set_telemetry_env(config.no_telemetry)
+        if config.verbose or config.log_redactions:
+            _LOGGER.setLevel(logging.INFO)
+        else:
+            _LOGGER.setLevel(logging.CRITICAL)
+
+    _LOGGER.debug("starting datafog-mcp server transport=%s", transport)
 
     if config is not None and transport == "streamable-http":
         mcp.run(transport=transport, port=config.port)

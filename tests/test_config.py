@@ -114,6 +114,45 @@ def test_proxy_config_no_telemetry_respects_env(monkeypatch: object) -> None:
     assert config.no_telemetry is True
 
 
+def test_server_config_no_telemetry_and_log_redactions(monkeypatch: object) -> None:
+    monkeypatch.setenv("DATAFOG_NO_TELEMETRY", "0")
+    monkeypatch.setenv("DATAFOG_LOG_REDACTIONS", "true")
+
+    args = Namespace(
+        wrap=None,
+        engine=None,
+        strategy=None,
+        entities=None,
+        verbose=None,
+        transport=None,
+        port=None,
+        config=None,
+        no_telemetry=None,
+    )
+    config = ServerConfig.from_args(args)
+    assert config.no_telemetry is False
+    assert config.log_redactions is True
+
+
+def test_proxy_config_no_telemetry_and_log_redactions_from_cli() -> None:
+    args = Namespace(
+        wrap=("python", "server.py"),
+        engine=None,
+        strategy=None,
+        entities=None,
+        verbose=None,
+        config=None,
+        intercept_tool_arguments=None,
+        intercept_tool_responses=None,
+        intercept_resources=None,
+        no_telemetry=True,
+        log_redactions=True,
+    )
+    config = ProxyConfig.from_args(args)
+    assert config.no_telemetry is True
+    assert config.log_redactions is True
+
+
 def test_proxy_config_merges_advanced_flags_from_env_and_cli(monkeypatch: object) -> None:
     monkeypatch.setenv("DATAFOG_INTERCEPT_TOOL_RESPONSES", "false")
     monkeypatch.setenv("DATAFOG_INTERCEPT_RESOURCES", "false")
