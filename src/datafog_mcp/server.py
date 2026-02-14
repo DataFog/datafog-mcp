@@ -6,8 +6,7 @@ from typing import Any
 from datafog.engine import scan, scan_and_redact
 from mcp.server.fastmcp import FastMCP
 
-from .config import ServerConfig
-
+from .config import ServerConfig, _set_telemetry_env
 
 mcp = FastMCP(
     name="datafog",
@@ -130,6 +129,8 @@ def run_server(transport: str = "stdio", config: ServerConfig | None = None) -> 
     if config is not None:
         configure_server(config)
         transport = config.transport
+        _set_telemetry_env(config.no_telemetry)
+
     if config is not None and transport == "streamable-http":
         mcp.run(transport=transport, port=config.port)
         return

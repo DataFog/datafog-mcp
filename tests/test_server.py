@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 
-from datafog_mcp.config import ServerConfig
 from datafog_mcp import server
+from datafog_mcp.config import ServerConfig
 
 
 def test_datafog_scan_uses_default_server_config(monkeypatch: object) -> None:
@@ -95,3 +96,17 @@ def test_datafog_restore_replaces_longest_tokens_first() -> None:
     )
 
     assert result["restored_text"] == "Found a and b"
+
+
+def test_run_server_applies_telemetry_env(monkeypatch: object) -> None:
+    called: dict[str, object] = {}
+
+    def fake_run(*args, **kwargs: object) -> None:
+        called["kwargs"] = kwargs
+
+    monkeypatch.setenv("DATAFOG_NO_TELEMETRY", "0")
+    monkeypatch.setattr(server.mcp, "run", fake_run)
+    server.run_server(config=ServerConfig(transport="stdio", no_telemetry=True))
+
+    assert os.environ["DATAFOG_NO_TELEMETRY"] == "1"
+    assert "kwargs" in called

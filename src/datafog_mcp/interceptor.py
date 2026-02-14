@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import asyncio
+from dataclasses import dataclass
 from typing import Any
 
 from datafog.engine import scan_and_redact
+
 from .mapper import TokenMapper
 
 

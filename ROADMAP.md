@@ -56,9 +56,10 @@
 - ✅ Env vars supported for Mode A and Mode B.
 - ✅ Full Mode B merge strategy implemented for interception/passthrough controls.
 - ✅ Advanced proxy key merge (responses/arguments/resources) implemented.
+- ✅ Telemetry opt-out flag (`no_telemetry`) wired through config and CLI.
 
 ## Security and Ops
-- ⏳ Telemetry opt-out / logging policy not implemented.
+- ✅ Telemetry opt-out / logging policy wired to runtime environment (`DATAFOG_NO_TELEMETRY`).
 - ⏳ Redaction logging opt-in not implemented.
 - ⏳ Redaction-strategy/PII exposure safeguards for logs and errors not implemented.
 - ⚠️ Dependency pin (`==4.3.0`) may be stricter than spec (`>=4.3.0`).

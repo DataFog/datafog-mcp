@@ -24,6 +24,12 @@ def _parse_args() -> argparse.Namespace:
     serve_parser.add_argument("--strategy", default=None, choices=["token", "mask", "hash"])
     serve_parser.add_argument("--config", default=None)
     serve_parser.add_argument("--verbose", action="store_true", default=None)
+    serve_parser.add_argument(
+        "--no-telemetry",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable datafog telemetry calls",
+    )
 
     proxy_parser = subparsers.add_parser("proxy", help="Run as MCP proxy wrapping another server")
     proxy_parser.add_argument(
@@ -37,6 +43,12 @@ def _parse_args() -> argparse.Namespace:
     proxy_parser.add_argument("--strategy", default=None, choices=["token", "mask", "hash"])
     proxy_parser.add_argument("--config", default=None)
     proxy_parser.add_argument("--verbose", action="store_true", default=None)
+    proxy_parser.add_argument(
+        "--no-telemetry",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable datafog telemetry calls",
+    )
     proxy_parser.add_argument(
         "--intercept-tool-arguments",
         action=argparse.BooleanOptionalAction,

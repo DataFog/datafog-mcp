@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 try:
@@ -12,6 +12,10 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility fall
 
 
 DEFAULT_SERVER_CONFIG_PATH = "datafog-mcp.toml"
+
+
+def _set_telemetry_env(no_telemetry: bool) -> None:
+    os.environ["DATAFOG_NO_TELEMETRY"] = "1" if no_telemetry else "0"
 
 
 def _normalize_entity_types(value: str | list[str] | None) -> list[str] | None:
@@ -104,10 +108,11 @@ class ServerConfig:
     entity_types: list[str] | None = None
     strategy: str = "token"
     verbose: bool = False
+    no_telemetry: bool = False
     config_path: str | None = None
 
     @classmethod
-    def from_args(cls, args: Any) -> "ServerConfig":
+    def from_args(cls, args: Any) -> ServerConfig:
         config_path = _resolve_config_path(getattr(args, "config", None))
         config_file = _load_config_values(config_path, "server")
 
@@ -137,6 +142,12 @@ class ServerConfig:
             cls().verbose,
         )
 
+        no_telemetry = _coalesce_bool(
+            getattr(args, "no_telemetry", None),
+            os.getenv("DATAFOG_NO_TELEMETRY"),
+            cls().no_telemetry,
+        )
+
         transport = _coalesce(
             getattr(args, "transport", None),
             config_file.get("transport"),
@@ -152,10 +163,7 @@ class ServerConfig:
         if isinstance(verbose, str):
             verbose = _coerce_bool(verbose)
 
-        if verbose is None:
-            verbose = cls().verbose
-        else:
-            verbose = bool(verbose)
+        verbose = cls().verbose if verbose is None else bool(verbose)
 
         return cls(
             transport=transport or cls().transport,
@@ -169,6 +177,7 @@ class ServerConfig:
             ),
             strategy=strategy,
             verbose=bool(verbose),
+            no_telemetry=bool(no_telemetry),
             config_path=config_path,
         )
 
@@ -182,6 +191,7 @@ class ProxyConfig:
     engine: str = "smart"
     entity_types: list[str] | None = None
     strategy: str = "token"
+    no_telemetry: bool = False
     config_path: str | None = None
     verbose: bool = False
     intercept_tool_arguments: bool = True
@@ -189,7 +199,7 @@ class ProxyConfig:
     intercept_resources: bool = False
 
     @classmethod
-    def from_args(cls, args: Any) -> "ProxyConfig":
+    def from_args(cls, args: Any) -> ProxyConfig:
         config_path = _resolve_config_path(getattr(args, "config", None))
         config_file = _load_config_values(config_path, "proxy")
 
@@ -226,6 +236,12 @@ class ProxyConfig:
         if verbose_bool is None:
             verbose_bool = cls().verbose
 
+        no_telemetry = _coalesce_bool(
+            getattr(args, "no_telemetry", None),
+            os.getenv("DATAFOG_NO_TELEMETRY"),
+            cls().no_telemetry,
+        )
+
         intercept_tool_arguments = _coalesce_bool(
             getattr(args, "intercept_tool_arguments", None),
             os.getenv("DATAFOG_INTERCEPT_TOOL_ARGUMENTS"),
@@ -260,6 +276,7 @@ class ProxyConfig:
             strategy=strategy,
             config_path=config_path,
             verbose=verbose_bool,
+            no_telemetry=bool(no_telemetry),
             intercept_tool_arguments=bool(intercept_tool_arguments),
             intercept_tool_responses=bool(intercept_tool_responses),
             intercept_resources=bool(intercept_resources),

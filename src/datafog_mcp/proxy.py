@@ -11,7 +11,7 @@ from fastmcp import Client
 from mcp import types
 from mcp.server.fastmcp import FastMCP
 
-from .config import ProxyConfig
+from .config import ProxyConfig, _set_telemetry_env
 from .interceptor import (
     InterceptorConfig,
     is_candidate_text,
@@ -253,6 +253,7 @@ async def run_proxy(config: ProxyConfig) -> None:
     if not target_command:
         raise ValueError("Proxy mode requires --wrap <command> [args...]")
 
+    _set_telemetry_env(config.no_telemetry)
     target_transport = _build_target_transport(config)
 
     mapper = TokenMapper()

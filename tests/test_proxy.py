@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -246,3 +247,39 @@ if __name__ == \"__main__\":
 
     payload = json.loads(resource_response)
     assert payload["uri"] == "https://api.example.com/user?email=alice@example.com"
+
+
+def test_run_proxy_applies_telemetry_env(monkeypatch: object) -> None:
+    called: dict[str, object] = {}
+
+    class _FakeClient:
+        async def list_tools(self) -> list[object]:
+            return []
+
+        async def __aexit__(self, *_) -> None:
+            called["closed"] = True
+
+    async def _acquire_fake_client(_config: ProxyConfig) -> _FakeClient:
+        called["acquired"] = True
+        return _FakeClient()
+
+    async def _fake_run_stdio_async(self) -> None:
+        called["run_stdio"] = True
+
+    monkeypatch.setattr(proxy_module, "_acquire_target_client", _acquire_fake_client)
+    monkeypatch.setattr(proxy_module.FastMCP, "run_stdio_async", _fake_run_stdio_async)
+
+    async def run() -> None:
+        await proxy_module.run_proxy(
+            ProxyConfig(
+                target_command="python",
+                target_args=["-c", "pass"],
+                no_telemetry=True,
+            )
+        )
+
+    asyncio.run(run())
+
+    assert os.environ["DATAFOG_NO_TELEMETRY"] == "1"
+    assert called.get("run_stdio") is True
+    assert called.get("acquired") is True
