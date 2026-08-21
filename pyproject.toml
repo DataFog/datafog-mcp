@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "datafog==4.3.0",
+    "datafog==4.8.0,<5",
     "mcp>=1.2.0",
     "fastmcp>=2.14,<3",
 ]

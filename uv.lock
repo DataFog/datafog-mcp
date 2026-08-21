@@ -543,16 +543,16 @@ wheels = [
 
 [[package]]
 name = "datafog"
-version = "4.3.0"
+version = "4.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5f/17/c34455bd50a7178bd53e7c27e16afe946e614a395313fb181d69ff7e07e9/datafog-4.3.0.tar.gz", hash = "sha256:06331ea195fe2761a0c051f6f0052baf2aa54578a22d93acb57f86d6f818e9c4", size = 72907, upload-time = "2026-02-13T18:30:29.798Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/06/4c/c1e5809f91ffb6ac070be65c51b33f368ad5009baa80da0af8437f29603b/datafog-4.8.0.tar.gz", hash = "sha256:e6b3093c64c3e3525dff6e50fe12d170fec60246bea3cf07504a40fe335435ae", size = 101764, upload-time = "2026-07-06T16:11:58.365Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/fa/d62cd25470e4705db00dec00907a92dbe0ff2b9c249583dc22d9f9e1358c/datafog-4.3.0-py3-none-any.whl", hash = "sha256:0f27dadca6a6c05d436be1708958562d6028a3ba5b970de7e10105b65a50029a", size = 60759, upload-time = "2026-02-13T18:30:28.619Z" },
+    { url = "https://files.pythonhosted.org/packages/50/03/e80bbc1f1f66999c9eb78ce73fcc01adaa1bc543bd8151dcd605e85b3130/datafog-4.8.0-py3-none-any.whl", hash = "sha256:f675222cf9309923bad7ac2b81800057ccfce0617a8817c89bd02611961345c2", size = 76314, upload-time = "2026-07-06T16:11:56.998Z" },
 ]
 
 [[package]]
@@ -608,7 +608,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.6.0" },
-    { name = "datafog", specifier = "==4.3.0" },
+    { name = "datafog", specifier = "==4.8.0,<5" },
     { name = "fastmcp", specifier = ">=2.14,<3" },
     { name = "mcp", specifier = ">=1.2.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.0" },
@@ -794,6 +794,7 @@ dependencies = [
     { name = "griffecli" },
     { name = "griffelib" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/04/56/28a0accac339c164b52a92c6cfc45a903acc0c174caa5c1713803467b533/griffe-2.0.0.tar.gz", hash = "sha256:c68979cd8395422083a51ea7cf02f9c119d889646d99b7b656ee43725de1b80f", size = 293906, upload-time = "2026-03-23T21:06:53.402Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/94/ee21d41e7eb4f823b94603b9d40f86d3c7fde80eacc2c3c71845476dddaa/griffe-2.0.0-py3-none-any.whl", hash = "sha256:5418081135a391c3e6e757a7f3f156f1a1a746cc7b4023868ff7d5e2f9a980aa", size = 5214, upload-time = "2026-02-09T19:09:44.105Z" },
 ]
@@ -806,6 +807,7 @@ dependencies = [
     { name = "colorama" },
     { name = "griffelib" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/a4/f8/2e129fd4a86e52e58eefe664de05e7d502decf766e7316cc9e70fdec3e18/griffecli-2.0.0.tar.gz", hash = "sha256:312fa5ebb4ce6afc786356e2d0ce85b06c1c20d45abc42d74f0cda65e159f6ef", size = 56213, upload-time = "2026-03-23T21:06:54.8Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/ed/d93f7a447bbf7a935d8868e9617cbe1cadf9ee9ee6bd275d3040fbf93d60/griffecli-2.0.0-py3-none-any.whl", hash = "sha256:9f7cd9ee9b21d55e91689358978d2385ae65c22f307a63fb3269acf3f21e643d", size = 9345, upload-time = "2026-02-09T19:09:42.554Z" },
 ]
@@ -814,6 +816,7 @@ wheels = [
 name = "griffelib"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ad/06/eccbd311c9e2b3ca45dbc063b93134c57a1ccc7607c5e545264ad092c4a9/griffelib-2.0.0.tar.gz", hash = "sha256:e504d637a089f5cab9b5daf18f7645970509bf4f53eda8d79ed71cce8bd97934", size = 166312, upload-time = "2026-03-23T21:06:55.954Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4d/51/c936033e16d12b627ea334aaaaf42229c37620d0f15593456ab69ab48161/griffelib-2.0.0-py3-none-any.whl", hash = "sha256:01284878c966508b6d6f1dbff9b6fa607bc062d8261c5c7253cb285b06422a7f", size = 142004, upload-time = "2026-02-09T19:09:40.561Z" },
 ]
