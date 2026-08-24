@@ -1,38 +1,53 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+
+VALID_ENGINES: frozenset[str] = frozenset({"regex", "spacy", "gliner", "smart"})
+
+DEFAULT_ENTITIES: tuple[str, ...] = (
+    "EMAIL",
+    "PHONE",
+    "SSN",
+    "CREDIT_CARD",
+    "DOB",
+    "ZIP",
+)
+
+NER_ENTITIES: frozenset[str] = frozenset({"PERSON", "ORGANIZATION", "LOCATION", "ADDRESS"})
+
+DEFAULT_MAX_BYTES = 1_048_576
 
 
-@dataclass
-class ProxyConfig:
-    """Runtime configuration shared by server and proxy modes."""
+@dataclass(frozen=True)
+class ScanConfig:
+    """
+    Detection settings for a single scan request.
+    """
 
-    target_command: str | None = None
-    target_args: list[str] | None = None
-    engine: str = "smart"
-    entity_types: list[str] | None = None
-    strategy: str = "token"
-    config_path: str | None = None
-    verbose: bool = False
+    engine: str = "regex"
+    entities: tuple[str, ...] = DEFAULT_ENTITIES
+    max_bytes: int = DEFAULT_MAX_BYTES
 
-    @classmethod
-    def from_args(cls, args: Any) -> "ProxyConfig":
-        entities = getattr(args, "entities", None)
-        entity_types = None
-        if entities:
-            entity_types = [item.strip() for item in entities.split(",") if item.strip()]
+    def __post_init__(self) -> None:
+        """
+        Reject invalid settings at construction time.
+        """
+        if self.engine not in VALID_ENGINES:
+            raise ValueError("invalid engine")
+        if not self.entities:
+            # An empty list disables type filtering and makes the engine attempt NER on every call
+            raise ValueError("entities must not be empty")
+        if self.max_bytes <= 0:
+            raise ValueError("max_bytes must be positive")
 
-        wrap = getattr(args, "wrap", []) or []
-        target_command = wrap[0] if wrap else None
-        target_args = list(wrap[1:]) if len(wrap) > 1 else []
+    @property
+    def requires_ner(self) -> tuple[str, ...]:
+        """
+        Requested entity types that depend on optional NER backends.
 
-        return cls(
-            target_command=target_command,
-            target_args=target_args,
-            engine=getattr(args, "engine", "smart"),
-            entity_types=entity_types,
-            strategy=getattr(args, "strategy", "token"),
-            config_path=getattr(args, "config", None),
-            verbose=bool(getattr(args, "verbose", False)),
-        )
+        Parameters: None
+        Returns:
+          The requested types that will yield nothing unless datafog[nlp] or
+          datafog[nlp-advanced] is installed.
+        """
+        return tuple(e for e in self.entities if e in NER_ENTITIES)
