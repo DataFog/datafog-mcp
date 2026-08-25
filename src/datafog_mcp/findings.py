@@ -54,6 +54,22 @@ def counts_by_type(entities: list[Entity]) -> dict[str, int]:
     return counts
 
 
+def validate_mode(mode: str) -> None:
+    """
+    Reject modes that are unknown or not implemented yet.
+
+    Parameters:
+      mode: The requested return mode.
+    Returns:
+      None. Raises on invalid input.
+    """
+    if mode not in VALID_MODES:
+        raise ValueError("Not a valid mode.")
+
+    if mode not in IMPLEMENTED_MODES:
+        raise UnsupportedMode("Not yet an implemented mode.")
+
+
 def render(
     mode: str,
     entities: list[Entity],
@@ -71,11 +87,7 @@ def render(
     Returns:
       A dict representing what was found, shaped by the mode.
     """
-    if mode not in VALID_MODES:
-        raise ValueError("Not a valid mode.")
-
-    if mode not in IMPLEMENTED_MODES:
-        raise UnsupportedMode("Not yet an implemented mode.")
+    validate_mode(mode)
 
     return {
         "path": path,

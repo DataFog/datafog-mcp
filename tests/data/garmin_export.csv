@@ -1,0 +1,9 @@
+# Garmin Connect Export Test
+# Account: jack.smith@example.com
+# Member since: 03/14/1987
+# Phone: 415-555-0182
+# Postal code: 94117
+activity_id,date,type,duration_min,distance_km,avg_hr,calories
+8891023,2026-08-01,running,42,7.2,148,612
+8891044,2026-08-02,cycling,75,28.4,132,890
+8891061,2026-08-04,swimming,38,1.9,151,545
