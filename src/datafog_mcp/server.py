@@ -30,12 +30,26 @@ async def datafog_scan(
     entity_types: list[str] | None = None,
 ) -> dict[str, Any]:
     """
-    Checks a file for PII.
+    Detect personal and sensitive data in a file, without reading it
+    into context.
 
-    Call this before reading a file that might hold PII, and before sending any
-    part of it to an external service. This opens and scans the file itself, so
-    do not read the file first. Otherwise the file contents would get placed in
-    context before being checked.
+    WHEN TO CALL THIS: before the first read of any file that might
+    contain personal data - exports, downloads, spreadsheets, logs,
+    database dumps, backups, or anything the user obtained from a
+    third-party service. Call it regardless of what the user asked
+    for. A request to analyze, summarize, convert, or upload a file
+    is as much a trigger as a request to check it for PII.
+
+    CALL THIS FIRST, BEFORE Read. This tool opens and scans the file
+    itself. If you read the file first and then call this tool, the
+    contents are already in the conversation and the check is
+    pointless - the exposure you were checking for has already
+    happened. Reading afterward is fine; reading before is not.
+
+    WHEN NOT TO CALL IT: source code, configuration tracked in the
+    project's repository, lockfiles, or build output. It detects
+    structured identifiers, not secrets - it will not find API keys,
+    tokens, or private keys.
 
     Parameters:
       path: The path of the file to scan.
