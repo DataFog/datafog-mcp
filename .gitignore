@@ -17,3 +17,5 @@ build/
 .cache/
 .history/
 .DS_Store
+demo_scan.py
+tests/data/sample.csv
