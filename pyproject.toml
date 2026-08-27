@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "datafog==4.3.0",
+    "datafog==4.8.0,<5",
     "mcp>=1.2.0",
     "fastmcp>=2.14,<3",
 ]
@@ -105,6 +105,7 @@ indent-style = "space"
 line-ending = "lf"
 
 [tool.mypy]
+files = ["src"]
 python_version = "3.10"
 strict = true
 warn_unused_configs = true
