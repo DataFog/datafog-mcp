@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
+from fastmcp.client.transports.config import MCPConfigTransport
+from fastmcp.server import create_proxy
 
 
 class ConfigError(ValueError):
@@ -52,7 +54,8 @@ def build_proxy(servers: dict[str, Any]) -> FastMCP[Any]:
     Returns:
       A proxy exposing every target's capabilities.
     """
-    return FastMCP.as_proxy({"mcpServers": servers}, name="datafog-proxy")
+    transport = MCPConfigTransport({"mcpServers": servers}, name_as_prefix=False)
+    return create_proxy(transport, name="datafog-proxy")
 
 
 def run_proxy(servers: dict[str, Any]) -> None:
