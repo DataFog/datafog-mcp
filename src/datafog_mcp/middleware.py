@@ -17,7 +17,7 @@ from .walker import ScanBudget, transform_strings, transform_text
 
 logger = logging.getLogger(__name__)
 
-# v1 ships the irreversible operations only. The engine also accepts "hash" and 
+# v1 ships the irreversible operations only. The engine also accepts "hash" and
 # "pseudonymize", but both are out of scope for v1
 VALID_STRATEGIES: frozenset[str] = frozenset({"mask", "token"})
 
@@ -113,11 +113,7 @@ class RedactingMiddleware(Middleware):
 
         content = [
             block.model_copy(
-                update={
-                    "text": transform_text(
-                        block.text, redactor, budget, self._skip_keys
-                    )
-                }
+                update={"text": transform_text(block.text, redactor, budget, self._skip_keys)}
             )
             if isinstance(block, mt.TextContent)
             else block
@@ -126,9 +122,7 @@ class RedactingMiddleware(Middleware):
 
         structured = result.structured_content
         if isinstance(structured, dict):
-            structured = transform_strings(
-                structured, redactor, budget, self._skip_keys
-            )
+            structured = transform_strings(structured, redactor, budget, self._skip_keys)
 
         tool = context.message.name
 
@@ -138,10 +132,7 @@ class RedactingMiddleware(Middleware):
                 content=[
                     mt.TextContent(
                         type="text",
-                        text=(
-                            "datafog: this response was too large to scan "
-                            "and was withheld."
-                        ),
+                        text=("datafog: this response was too large to scan and was withheld."),
                     )
                 ],
                 is_error=True,
@@ -149,8 +140,7 @@ class RedactingMiddleware(Middleware):
 
         if redactor.counts:
             summary = ", ".join(
-                f"{name} x{count}"
-                for name, count in sorted(redactor.counts.items())
+                f"{name} x{count}" for name, count in sorted(redactor.counts.items())
             )
             logger.info("datafog: %s %s", tool, summary)
 

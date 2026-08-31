@@ -47,9 +47,9 @@ def load_servers(path: str) -> dict[str, Any]:
 
 
 def build_proxy(
-        servers: dict[str, Any],
-        middleware: Middleware | None = None,
-        ) -> FastMCP[Any]:
+    servers: dict[str, Any],
+    middleware: Middleware | None = None,
+) -> FastMCP[Any]:
     """
     Build one proxy in front of every configured server.
 
@@ -67,9 +67,9 @@ def build_proxy(
 
 
 def run_proxy(
-        servers: dict[str, Any],
-        middleware: Middleware | None = None,
-        ) -> None:
+    servers: dict[str, Any],
+    middleware: Middleware | None = None,
+) -> None:
     """
     Run the proxy on stdio until the client disconnects.
 

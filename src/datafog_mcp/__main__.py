@@ -33,14 +33,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("serve", help="Run the scan tool server (default)")
     proxy = sub.add_parser("proxy", help="Wrap other MCP servers")
-    adopt = sub.add_parser(
-        "adopt", help="Move registered MCP servers behind the proxy"
-    )
+    adopt = sub.add_parser("adopt", help="Move registered MCP servers behind the proxy")
     adopt.add_argument("--config", metavar="PATH", default=None)
     adopt.add_argument("--executable", metavar="PATH", default=None)
-    adopt.add_argument(
-        "--strategy", choices=("mask", "token"), default="mask"
-    )
+    adopt.add_argument("--strategy", choices=("mask", "token"), default="mask")
     adopt.add_argument("--skip-keys", metavar="KEYS", default="")
     adopt.add_argument("--dry-run", action="store_true")
     source = proxy.add_mutually_exclusive_group(required=True)
@@ -107,9 +103,7 @@ def _middleware_from_args(args: argparse.Namespace) -> Middleware:
     """
     from .middleware import RedactingMiddleware
 
-    keys = frozenset(
-        key.strip() for key in args.skip_keys.split(",") if key.strip()
-    )
+    keys = frozenset(key.strip() for key in args.skip_keys.split(",") if key.strip())
     return RedactingMiddleware(strategy=args.strategy, skip_keys=keys)
 
 
@@ -117,7 +111,7 @@ def _configure_logging() -> None:
     """
     Send log records to stderr.
 
-    Under stdio transport stdout carries JSON-RPC, so a handler writing there 
+    Under stdio transport stdout carries JSON-RPC, so a handler writing there
     corrupts the protocol stream.
 
     Returns:
@@ -150,7 +144,7 @@ def main() -> None:
         except AdoptError as exc:
             raise SystemExit(f"datafog-mcp: {exc}") from exc
         return
-    
+
     if args.command == "proxy":
         from .proxy import ConfigError, run_proxy
 

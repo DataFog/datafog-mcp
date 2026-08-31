@@ -15,9 +15,7 @@ DEFAULT_PROXY_CONFIG = Path.home() / ".config" / "datafog" / "servers.json"
 PROXY_SERVER_NAME = "datafog-proxy"
 
 # Wrapping our own servers would make the proxy spawn itself.
-RESERVED_NAMES: frozenset[str] = frozenset(
-    {PROXY_SERVER_NAME, "datafog-scan"}
-)
+RESERVED_NAMES: frozenset[str] = frozenset({PROXY_SERVER_NAME, "datafog-scan"})
 
 
 class AdoptError(RuntimeError):
@@ -78,7 +76,7 @@ def merge_proxy_config(
     """
     Add servers to the proxy's config, keeping any already there.
 
-    The file ends up holding every wrapped server's credentials, so it is 
+    The file ends up holding every wrapped server's credentials, so it is
     written owner-only.
 
     Parameters:
@@ -115,13 +113,9 @@ def _claude(*args: str, check: bool = True) -> None:
     Returns:
       None.
     """
-    result = subprocess.run(
-        ["claude", "mcp", *args], capture_output=True, text=True
-    )
+    result = subprocess.run(["claude", "mcp", *args], capture_output=True, text=True)
     if check and result.returncode != 0:
-        raise AdoptError(
-            f"claude mcp {' '.join(args)} failed: {result.stderr.strip()}"
-        )
+        raise AdoptError(f"claude mcp {' '.join(args)} failed: {result.stderr.strip()}")
 
 
 def _register_proxy(
@@ -167,7 +161,7 @@ def adopt(
     """
     Wrap every stdio server the client knows about.
 
-    Re-runnable: servers already behind the proxy are left alone, and servers 
+    Re-runnable: servers already behind the proxy are left alone, and servers
     registered since the last run are picked up.
 
     Parameters:

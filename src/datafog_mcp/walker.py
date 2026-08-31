@@ -28,6 +28,7 @@ class ScanBudget:
     """
     Cap how much text one tool result might hand to the scanner.
     """
+
     per_string: int = MAX_SCAN_CHARS
     total: int = TOTAL_SCAN_CHARS
     used: int = 0
@@ -51,16 +52,16 @@ class ScanBudget:
 
 
 def transform_strings(
-        data: Any,
-        fn: Callable[[str], str],
-        budget: ScanBudget,
-        skip_keys: frozenset[str] = frozenset(),
+    data: Any,
+    fn: Callable[[str], str],
+    budget: ScanBudget,
+    skip_keys: frozenset[str] = frozenset(),
 ) -> Any:
     """
     Apply fn to every scannable string in a parsed JSON structure.
 
     Walks with an explicit stack so that deeply nested payloads cannot raise
-    RecursionError and leave a result silently unscanned. Mutates data in place, 
+    RecursionError and leave a result silently unscanned. Mutates data in place,
     so pass a freshly parsed structure.
 
     Parameters:
@@ -97,16 +98,16 @@ def transform_strings(
 
 
 def transform_text(
-        text: str,
-        fn: Callable[[str], str],
-        budget: ScanBudget,
-        skip_keys: frozenset[str] = frozenset(),
+    text: str,
+    fn: Callable[[str], str],
+    budget: ScanBudget,
+    skip_keys: frozenset[str] = frozenset(),
 ) -> str:
     """
     Apply fn inside a text block, respecting JSON structure if present.
 
-    A server that declares no output schema returns its whole payload as one 
-    JSON string. Scanning that string flat lets matches run across delimiters 
+    A server that declares no output schema returns its whole payload as one
+    JSON string. Scanning that string flat lets matches run across delimiters
     and defeats skip_keys, so parse it first.
 
     Parameters:
