@@ -100,7 +100,7 @@ def transform_text(
         text: str,
         fn: Callable[[str], str],
         budget: ScanBudget,
-        skip_keys: frozenset[set] = frozenset()
+        skip_keys: frozenset[str] = frozenset(),
 ) -> str:
     """
     Apply fn inside a text block, respecting JSON structure if present.
@@ -142,7 +142,7 @@ def transform_text(
         changed = changed or replacement != value
         return replacement
 
-    transform_strings(parsed, _track, budget, skip_keys) # type: ignore
+    transform_strings(parsed, _track, budget, skip_keys)
 
     if not changed:
         return text

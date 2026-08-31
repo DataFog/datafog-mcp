@@ -51,7 +51,7 @@ def _collect(text: str, skip_keys: frozenset[str]) -> list[str]:
         seen.append(value)
         return value
 
-    transform_text(text, _record, ScanBudget(), skip_keys) # type: ignore
+    transform_text(text, _record, ScanBudget(), skip_keys)
     return seen
 
 
