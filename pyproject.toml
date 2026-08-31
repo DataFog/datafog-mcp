@@ -20,7 +20,7 @@ classifiers = [
 dependencies = [
     "datafog==4.8.0,<5",
     "mcp>=1.2.0",
-    "fastmcp>=2.14,<3",
+    "fastmcp>=3,<4",
 ]
 
 [project.optional-dependencies]
@@ -119,7 +119,7 @@ exclude = ["tests", "build", "dist", ".venv", ".pytest_cache"]
 
 [tool.pyright]
 include = ["src", "tests"]
-exclude = [".venv", ".ruff_cache", ".mypy_cache", "build", "dist", "coverage" ]
+exclude = [".venv", ".ruff_cache", ".mypy_cache", "build", "dist", "coverage", "**/node_modules", "**/__pycache__", "**/.*" ]
 typeCheckingMode = "standard"
 reportMissingTypeStubs = true
 
