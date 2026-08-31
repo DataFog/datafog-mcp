@@ -40,6 +40,18 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="COMMAND",
         help="Command and arguments of a single target server",
     )
+    proxy.add_argument(
+        "--strategy",
+        choices=("mask", "token"),
+        default="mask",
+        help="How to replace detections (default: mask)",
+    )
+    proxy.add_argument(
+        "--skip-keys",
+        metavar="KEYS",
+        default="",
+        help="Comma-separated payload keys to leave unscanned",
+    )
     return parser
 
 

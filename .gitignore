@@ -21,3 +21,4 @@ demo_scan.py
 tests/data/sample.csv
 demo_proxy.py
 servers.demo.json
+tests/fixtures/slack_redacted.json

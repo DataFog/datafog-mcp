@@ -27,6 +27,8 @@ class ScanConfig:
     engine: str = "regex"
     entities: tuple[str, ...] = DEFAULT_ENTITIES
     max_bytes: int = DEFAULT_MAX_BYTES
+    allowlist: tuple[str, ...] = ()
+    allowlist_patterns: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """

@@ -11,6 +11,7 @@ from typing import Any
 from fastmcp import FastMCP
 from fastmcp.client.transports.config import MCPConfigTransport
 from fastmcp.server import create_proxy
+from fastmcp.server.middleware import Middleware
 
 
 class ConfigError(ValueError):
@@ -45,26 +46,37 @@ def load_servers(path: str) -> dict[str, Any]:
     return servers
 
 
-def build_proxy(servers: dict[str, Any]) -> FastMCP[Any]:
+def build_proxy(
+        servers: dict[str, Any],
+        middleware: Middleware | None = None,
+        ) -> FastMCP[Any]:
     """
     Build one proxy in front of every configured server.
 
     Parameters:
       servers: An mcpServers mapping, name to server config.
+      middleware: Optional middleware applied to every request.
     Returns:
       A proxy exposing every target's capabilities.
     """
     transport = MCPConfigTransport({"mcpServers": servers}, name_as_prefix=False)
-    return create_proxy(transport, name="datafog-proxy")
+    proxy = create_proxy(transport, name="datafog-proxy")
+    if middleware is not None:
+        proxy.add_middleware(middleware)
+    return proxy
 
 
-def run_proxy(servers: dict[str, Any]) -> None:
+def run_proxy(
+        servers: dict[str, Any],
+        middleware: Middleware | None = None,
+        ) -> None:
     """
     Run the proxy on stdio until the client disconnects.
 
     Parameters:
       servers: An mcpServers mapping, name to server config.
+      middleware: Optional middleware applied to every request.
     Returns:
       None.
     """
-    build_proxy(servers).run(transport="stdio")
+    build_proxy(servers, middleware).run(transport="stdio")
