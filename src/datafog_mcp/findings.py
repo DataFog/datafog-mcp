@@ -97,3 +97,34 @@ def render(
         "engine_used": engine_used,
         "entities": [entity_to_dict(e) for e in entities],
     }
+
+
+def render_redaction(
+    entities: list[Entity],
+    input_path: str,
+    output_path: str,
+    strategy: str,
+    engine: str,
+) -> dict[str, Any]:
+    """
+    Build the tool responses for a completed redaction.
+
+    Does not use entity_to_dict because it carries entity.text.
+
+    Parameters:
+      entities: Detections the engine replaced.
+      input_path: The file that was read.
+      output_path: The file that was written.
+      strategy: The engine strategy applied.
+      engine: The detector engine requested.
+    Returns:
+      A dict describing what was replaced, carrying no matched value.
+    """
+    return {
+        "input_path": input_path,
+        "output_path": output_path,
+        "entity_count": len(entities),
+        "counts": counts_by_type(entities),
+        "strategy": strategy,
+        "engine": engine,
+    }
