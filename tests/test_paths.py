@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from datafog_mcp import paths
 from datafog_mcp.paths import (
     ALLOWED_ROOTS_VAR,
     PathNotAllowed,
@@ -106,10 +107,12 @@ def test_tilde_in_the_variable_is_expanded(
 
 
 def test_unset_variable_falls_back_to_home(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """With nothing configured the server may touch the user's files."""
     monkeypatch.delenv(ALLOWED_ROOTS_VAR, raising=False)
+    monkeypatch.setattr(paths, "ROOTS_FILE", tmp_path / "absent")
 
     assert allowed_roots() == (Path.home().resolve(),)
 
@@ -132,3 +135,63 @@ def test_output_outside_every_root_is_refused(
 
     with pytest.raises(PathNotAllowed):
         resolve_output(str(tmp_path / "escape.csv"))
+
+
+def _write_roots_file(monkeypatch: pytest.MonkeyPatch, path: Path, body: str) -> None:
+    """
+    Point the policy at a roots file holding the given text.
+
+    Parameters:
+      monkeypatch: Redirects the module-level file location.
+      path: Where to write the file.
+      body: File contents.
+    """
+    path.write_text(body, encoding="utf-8")
+    monkeypatch.setattr(paths, "ROOTS_FILE", path)
+
+
+def test_file_supplies_roots_when_env_is_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The config file is the source of truth by default."""
+    monkeypatch.delenv(ALLOWED_ROOTS_VAR, raising=False)
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    _write_roots_file(monkeypatch, tmp_path / "roots", f"{allowed}\n")
+
+    current = paths.policy()
+
+    assert current.roots == (allowed.resolve(),)
+    assert current.source == str(tmp_path / "roots")
+
+
+def test_env_overrides_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A locked-down install cannot be widened by editing a file."""
+    from_file = tmp_path / "from_file"
+    from_env = tmp_path / "from_env"
+    from_file.mkdir()
+    from_env.mkdir()
+
+    _write_roots_file(monkeypatch, tmp_path / "roots", f"{from_file}\n")
+    _set_roots(monkeypatch, from_env)
+
+    assert paths.policy().roots == (from_env.resolve(),)
+
+
+def test_comments_and_blanks_are_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A file of examples leaves the policy at its default."""
+    monkeypatch.delenv(ALLOWED_ROOTS_VAR, raising=False)
+    _write_roots_file(monkeypatch, tmp_path / "roots", "# ~/Downloads\n\n#~/Documents\n")
+
+    current = paths.policy()
+
+    assert current.roots == (Path.home().resolve(),)
+    assert current.source == "default (home directory)"
+
+
+def test_tilde_in_the_file_is_expanded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Paths are written the way a user would type them."""
+    monkeypatch.delenv(ALLOWED_ROOTS_VAR, raising=False)
+    _write_roots_file(monkeypatch, tmp_path / "roots", "~\n")
+
+    assert paths.policy().roots == (Path.home().resolve(),)

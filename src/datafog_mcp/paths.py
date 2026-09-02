@@ -5,7 +5,22 @@ Where the server is allowed to read and write.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
+
+ROOTS_FILE = Path.home() / ".config" / "datafog" / "allowed_roots"
+
+ROOTS_TEMPLATE = """\
+# Directories datafog may read from and write to.
+# One path per line. Blank lines and lines starting with # are ignored.
+# ~ is expanded.
+#
+# Uncomment or add the directories you want datafog to reach.
+
+# ~/Downloads
+# ~/Documents
+"""
 
 ALLOWED_ROOTS_VAR = "DATAFOG_MCP_ALLOWED_ROOTS"
 
@@ -19,23 +34,90 @@ class PathNotAllowed(Exception):
     """
 
 
+@dataclass(frozen=True)
+class RootPolicy:
+    """
+    The roots in force and where they were configured.
+    """
+
+    roots: tuple[Path, ...]
+    source: str
+
+
+def _parse(entries: Iterable[str]) -> tuple[Path, ...]:
+    """
+    Turn raw entries into resolved roots.
+
+    Only whole-line comments are honored, so a path containing a hash is not
+    truncated.
+
+    Parameters:
+      entries: Candidate path strings.
+    Returns:
+      The resolved roots, skipping blanks and comments.
+    """
+    return tuple(
+        Path(entry.strip()).expanduser().resolve()
+        for entry in entries
+        if entry.strip() and not entry.strip().startswith("#")
+    )
+
+
+def _roots_from_env() -> tuple[Path, ...]:
+    """
+    Read roots from the environment.
+
+    Returns:
+        The configured roots, empty when the variable is unset.
+    """
+    raw = os.environ.get(ALLOWED_ROOTS_VAR, "")
+    return _parse(raw.split(os.pathsep)) if raw.strip() else ()
+
+
+def _roots_from_file(path: Path) -> tuple[Path, ...]:
+    """
+    Read roots from the config file.
+
+    Parameters:
+      path: The roots file.
+    Returns:
+      The configured roots, empty when the file is absent or only has comments.
+    """
+    if not path.is_file():
+        return ()
+    return _parse(path.read_text(encoding="utf-8").splitlines())
+
+
+def policy() -> RootPolicy:
+    """
+    Resolve the roots in force and where they came from.
+
+    Precedence is the environment variable, then the config file, then the
+    user's home directory. The variable wins so a locked-down install cannot be
+    widened by editing a file.
+
+    Returns:
+      The roots and a description of their source.
+    """
+    from_env = _roots_from_env()
+    if from_env:
+        return RootPolicy(from_env, f"${ALLOWED_ROOTS_VAR}")
+
+    from_file = _roots_from_file(ROOTS_FILE)
+    if from_file:
+        return RootPolicy(from_file, str(ROOTS_FILE))
+
+    return RootPolicy((Path.home().resolve(),), "default (home directory)")
+
+
 def allowed_roots() -> tuple[Path, ...]:
     """
     Resolve the roots this server may read from and write to.
 
-    Reads DATAFOG_MCP_ALLOWED_ROOTS, colon-separated on Linux and macOS, semi-
-    colon separated on Windows. Unset falls back to the user's home directory,
-    which covers the intended use without exposing system paths or other users'
-    files.
-
     Returns:
-      The configured roots, resolved.
+      The roots in force.
     """
-    raw = os.environ.get(ALLOWED_ROOTS_VAR, "")
-    roots = tuple(
-        Path(part).expanduser().resolve() for part in raw.split(os.pathsep) if part.strip()
-    )
-    return roots or (Path.home().resolve(),)
+    return policy().roots
 
 
 def _is_denied(resolved: Path) -> bool:
