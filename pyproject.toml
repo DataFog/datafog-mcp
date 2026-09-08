@@ -18,9 +18,9 @@ classifiers = [
 ]
 
 dependencies = [
-    "datafog==4.8.0,<5",
     "mcp>=1.2.0",
     "fastmcp>=3,<4",
+    "datafog-core>=0.3,<0.4",
 ]
 
 [project.optional-dependencies]

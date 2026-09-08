@@ -612,17 +612,16 @@ wheels = [
 ]
 
 [[package]]
-name = "datafog"
-version = "4.8.0"
+name = "datafog-core"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/06/4c/c1e5809f91ffb6ac070be65c51b33f368ad5009baa80da0af8437f29603b/datafog-4.8.0.tar.gz", hash = "sha256:e6b3093c64c3e3525dff6e50fe12d170fec60246bea3cf07504a40fe335435ae", size = 101764, upload-time = "2026-07-06T16:11:58.365Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/56/70dfa505bbbe125cf3240e3a453903d6b3212df15082ddf7b9ab77587895/datafog_core-0.3.0.tar.gz", hash = "sha256:ddaf29c85ee4b826be137bde7de9090d8d64813a6e1399b1de4661c3e9285e30", size = 69164, upload-time = "2026-09-06T01:25:05.617Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/03/e80bbc1f1f66999c9eb78ce73fcc01adaa1bc543bd8151dcd605e85b3130/datafog-4.8.0-py3-none-any.whl", hash = "sha256:f675222cf9309923bad7ac2b81800057ccfce0617a8817c89bd02611961345c2", size = 76314, upload-time = "2026-07-06T16:11:56.998Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/7e/83a18baabdd58a627febe9b93a9d82449e80a0ea915cb5b3d085aa653a46/datafog_core-0.3.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:265010c1f27d9851bc15b77fe7eb9f2d7edf5135d8efc4759872b3e8e9f9db40", size = 1586147, upload-time = "2026-09-06T01:24:58.059Z" },
+    { url = "https://files.pythonhosted.org/packages/60/7e/a4ce04f1b34a2dddb0f2fa87c030246d7bf8d0521caf396052a0f89932fa/datafog_core-0.3.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:8f6787d4ac95dea0497a2ec607f1657a4755e14b078d6245355638d3a075720d", size = 1523246, upload-time = "2026-09-06T01:24:59.522Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/1a/b80e8c6b5da4220dc921bc0f4ed6310ebf1bd6d7c6cefcbd473118b63d77/datafog_core-0.3.0-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:51a5a95f60890bd3552d20c625f91528600878bb0dc94780202894a26cca0f36", size = 1688984, upload-time = "2026-09-06T01:25:00.79Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/0c/cbe7644ea6e2e8c3663951228ca3432c2a4199850dcdc4300cf510346b87/datafog_core-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:2f8458e058c653f7603d8784d2e8deff1a71dc7a00e41e056f8361c1ab162cc8", size = 1759324, upload-time = "2026-09-06T01:25:02.372Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/93/d60c2c0a9e20df5ac3e039cd82a27aa232abb88080bc731a0721b0b72167/datafog_core-0.3.0-cp310-abi3-win_amd64.whl", hash = "sha256:c7b32aa988c7297f7e250c0cf451f1dc42d7c4e808a65a8d1f7890ebb4ecb5cd", size = 1382381, upload-time = "2026-09-06T01:25:04.042Z" },
 ]
 
 [[package]]
@@ -630,7 +629,7 @@ name = "datafog-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "datafog" },
+    { name = "datafog-core" },
     { name = "fastmcp" },
     { name = "mcp" },
 ]
@@ -678,7 +677,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.6.0" },
-    { name = "datafog", specifier = "==4.8.0,<5" },
+    { name = "datafog-core", specifier = ">=0.3,<0.4" },
     { name = "fastmcp", specifier = ">=3,<4" },
     { name = "mcp", specifier = ">=1.2.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.0" },
