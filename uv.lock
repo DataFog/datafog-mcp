@@ -613,15 +613,15 @@ wheels = [
 
 [[package]]
 name = "datafog-core"
-version = "0.3.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1e/56/70dfa505bbbe125cf3240e3a453903d6b3212df15082ddf7b9ab77587895/datafog_core-0.3.0.tar.gz", hash = "sha256:ddaf29c85ee4b826be137bde7de9090d8d64813a6e1399b1de4661c3e9285e30", size = 69164, upload-time = "2026-09-06T01:25:05.617Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/42/18a94f66c2296b34ebeca6a9b3b96bbd8fdcf63803cff26569a54b642ba1/datafog_core-0.3.1.tar.gz", hash = "sha256:4fc117785726d03855256e36a1873a71794e4dfb4c6d4b8ff2addea13056e460", size = 73964, upload-time = "2026-09-09T01:59:37.074Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2d/7e/83a18baabdd58a627febe9b93a9d82449e80a0ea915cb5b3d085aa653a46/datafog_core-0.3.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:265010c1f27d9851bc15b77fe7eb9f2d7edf5135d8efc4759872b3e8e9f9db40", size = 1586147, upload-time = "2026-09-06T01:24:58.059Z" },
-    { url = "https://files.pythonhosted.org/packages/60/7e/a4ce04f1b34a2dddb0f2fa87c030246d7bf8d0521caf396052a0f89932fa/datafog_core-0.3.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:8f6787d4ac95dea0497a2ec607f1657a4755e14b078d6245355638d3a075720d", size = 1523246, upload-time = "2026-09-06T01:24:59.522Z" },
-    { url = "https://files.pythonhosted.org/packages/9d/1a/b80e8c6b5da4220dc921bc0f4ed6310ebf1bd6d7c6cefcbd473118b63d77/datafog_core-0.3.0-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:51a5a95f60890bd3552d20c625f91528600878bb0dc94780202894a26cca0f36", size = 1688984, upload-time = "2026-09-06T01:25:00.79Z" },
-    { url = "https://files.pythonhosted.org/packages/8f/0c/cbe7644ea6e2e8c3663951228ca3432c2a4199850dcdc4300cf510346b87/datafog_core-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:2f8458e058c653f7603d8784d2e8deff1a71dc7a00e41e056f8361c1ab162cc8", size = 1759324, upload-time = "2026-09-06T01:25:02.372Z" },
-    { url = "https://files.pythonhosted.org/packages/d3/93/d60c2c0a9e20df5ac3e039cd82a27aa232abb88080bc731a0721b0b72167/datafog_core-0.3.0-cp310-abi3-win_amd64.whl", hash = "sha256:c7b32aa988c7297f7e250c0cf451f1dc42d7c4e808a65a8d1f7890ebb4ecb5cd", size = 1382381, upload-time = "2026-09-06T01:25:04.042Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/bb/79e6c929ce471b610f668c5a428ac7e303290f943610256eaa251d12cbb4/datafog_core-0.3.1-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:a139bdd1c016e74aa0b77d1db41c057fc144ab68848fe6a7120e3de505059324", size = 1589584, upload-time = "2026-09-09T01:59:28.667Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/85/2f8f92245552e4a9aa0023a06fd8731ecb4f074ff5dc63c128c7480211a6/datafog_core-0.3.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:ce37d9a00ac1c8626c6ca9fe8af4b7c12c7bd011b8169bbfe1a8e893ca2e7eec", size = 1526015, upload-time = "2026-09-09T01:59:30.338Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/06/7a1db9ee0215d0c51a826fe900823e497f43d64655b18c00bfa1c4d683c5/datafog_core-0.3.1-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:dcb39106247325be6bdc1443d7a56e59f10d868fe2786187d26756be9bc4190f", size = 1691956, upload-time = "2026-09-09T01:59:32.256Z" },
+    { url = "https://files.pythonhosted.org/packages/06/e0/4af72f66f932246f2b97584a6aba8dad441ce81e7064f9b98616470e60de/datafog_core-0.3.1-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:8bc8293f9175781574dd626ebed4776224837e93e90a239ba6d3231cb8bed470", size = 1762325, upload-time = "2026-09-09T01:59:33.798Z" },
+    { url = "https://files.pythonhosted.org/packages/22/a8/dee9e04e1cb8e509d140f1be6fd8719740d057e05b1836944c22ffe580b7/datafog_core-0.3.1-cp310-abi3-win_amd64.whl", hash = "sha256:adca9d9227ec7e3971b64a98f3a499503b817abec5038b5811ba03ddde78e68a", size = 1384955, upload-time = "2026-09-09T01:59:35.638Z" },
 ]
 
 [[package]]
