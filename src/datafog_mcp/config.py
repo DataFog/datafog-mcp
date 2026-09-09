@@ -5,7 +5,10 @@ Detection and transformation settings.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Literal, get_args
+
+if TYPE_CHECKING:
+    from datafog_core import _TransformationConfig
 
 SUPPORTED_ENTITIES: frozenset[str] = frozenset(
     {
@@ -28,13 +31,8 @@ DEFAULT_ENTITIES: tuple[str, ...] = (
     "ZIP_CODE",
 )
 
-VALID_STRATEGIES: frozenset[str] = frozenset(
-    {
-        "mask",
-        "redact",
-        "remove",
-    }
-)
+Strategy = Literal["mask", "redact", "remove"]
+VALID_STRATEGIES: frozenset[str] = frozenset(get_args(Strategy))
 
 DEFAULT_MAX_BYTES = 1_048_576
 
@@ -72,15 +70,24 @@ class ScanConfig:
         return entity_type in self.entities
 
 
-def transform_config(strategy: str) -> dict[str, Any]:
+_STRATEGY_CONFIGS: dict[Strategy, _TransformationConfig] = {
+    "mask": {"default": {"strategy": "mask"}},
+    "redact": {"default": {"strategy": "redact"}},
+    "remove": {"default": {"strategy": "remove"}},
+}
+
+
+def transform_config(strategy: Strategy) -> _TransformationConfig:
     """
-    Build the engine's transformation configuration.
+    Look up the engine's transformation configuration.
+
+    Built as literals rather than from the argument: core types each strategy
+    as its own TypedDict, and a variable would stay a union that matches none
+    of them.
 
     Parameters:
-        strategy: One of mask, redact, or remove.
+      strategy: One of mask, redact, or remove.
     Returns:
-        The config dict datafog_core.transform expects.
+      The config datafog_core.transform expects.
     """
-    if strategy not in VALID_STRATEGIES:
-        raise ValueError(f"unsupported strategy: {strategy}")
-    return {"default": {"strategy": strategy}}
+    return _STRATEGY_CONFIGS[strategy]

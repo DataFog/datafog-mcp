@@ -4,12 +4,17 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from datafog.engine import scan, scan_and_redact
+from datafog_core import scan, transform
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
-from datafog_mcp.config import ScanConfig
-from datafog_mcp.findings import Mode, render, render_redaction, validate_mode
+from datafog_mcp.config import ScanConfig, Strategy, transform_config
+from datafog_mcp.findings import (
+    Mode,
+    render,
+    render_transformation,
+    validate_mode,
+)
 from datafog_mcp.paths import PathNotAllowed
 from datafog_mcp.reader import (
     ReadError,
@@ -22,36 +27,33 @@ mcp = FastMCP(
     name="datafog",
     version="0.1.0",
     instructions=(
-        "Local PII detection. Scans files on disk for emails, phone numbers, "
-        "SSNs, credit card numbers, dates of birth, and postal codes. Can write "
-        "a masked or tokenized copy. Runs locally. No data is sent anywhere."
+        "Local PII detection and transformation. Scans files on disk "
+        "for emails, phone numbers, SSNs, credit card numbers, dates, "
+        "and ZIP codes, and can write a transformed copy. Runs "
+        "locally. No data is sent anywhere."
     ),
 )
 
-_OUTPUT_SUFFIXES: dict[str, str] = {"mask": "redacted", "token": "anonymized"}
+_OUTPUT_SUFFIXES: dict[Strategy, str] = {
+    "redact": "redacted",
+    "mask": "masked",
+    "remove": "removed",
+}
 
 
-def _config_from(
-    engine: str | None,
-    entity_types: list[str] | None,
-) -> ScanConfig:
+def _config_from(entity_types: list[str] | None) -> ScanConfig:
     """
     Build detection settings from optional tool arguments.
 
     Parameters:
-      engine: The detector engine, or None for the default.
-      entity_types: The types to look for, or None for the default.
+      entity_types: The types to keep, or None for the default set.
     Returns:
       A validated ScanConfig.
     """
-    overrides: dict[str, Any] = {}
-    if engine is not None:
-        overrides["engine"] = engine
-    if entity_types:
-        overrides["entities"] = tuple(entity_types)
-
     try:
-        return ScanConfig(**overrides)
+        if entity_types:
+            return ScanConfig(entities=tuple(entity_types))
+        return ScanConfig()
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
 
@@ -60,37 +62,33 @@ def _config_from(
 async def datafog_scan(
     path: str,
     mode: Mode = "findings",
-    engine: str | None = None,
     entity_types: list[str] | None = None,
 ) -> dict[str, Any]:
     """
-    Detect personal and sensitive data in a file, without reading it
-    into context.
+    Detect personal and sensitive data in a file, without reading it into
+    context.
 
-    WHEN TO CALL THIS: before the first read of any file that might
-    contain personal data - exports, downloads, spreadsheets, logs,
-    database dumps, backups, or anything the user obtained from a
-    third-party service. Call it regardless of what the user asked
-    for. A request to analyze, summarize, convert, or upload a file
-    is as much a trigger as a request to check it for PII.
+    WHEN TO CALL THIS: before the first read of any file that might contain
+    personal data - exports, downloads, spreadsheets, logs, database dumps,
+    backups, or anything the user obtained from a third-party service. Call it
+    regardless of what the user asked for. A request to analyze, summarize,
+    convert, or upload a file is as much a trigger as a request to check it for
+    PII.
 
-    CALL THIS FIRST, BEFORE Read. This tool opens and scans the file
-    itself. If you read the file first and then call this tool, the
-    contents are already in the conversation and the check is
-    pointless - the exposure you were checking for has already
-    happened. Reading afterward is fine; reading before is not.
+    CALL THIS FIRST, BEFORE Read. This tool opens and scans the file itself. If
+    you read the file first and then call this tool, the contents are already in
+    the conversation and the check is pointless - the exposure you were checking
+    for has already happened. Reading afterward is fine; reading before is not.
 
-    WHEN NOT TO CALL IT: source code, configuration tracked in the
-    project's repository, lockfiles, or build output. It detects
-    structured identifiers, not secrets - it will not find API keys,
-    tokens, or private keys.
+    WHEN NOT TO CALL IT: source code, configuration tracked in the project's
+    repository, lockfiles, or build output. It detects structured identifiers,
+    not secrets - it will not find API keys, tokens, or private keys.
 
     Parameters:
       path: The path of the file to scan.
       mode: What to return.
-      engine: The detector engine to use. Defaults to "regex".
       entity_types: The types to look for. Default to EMAIL, PHONE, SSN,
-      CREDIT_CARD, DOB, and ZIP.
+      CREDIT_CARD, DATE, and ZIP_CODE.
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
       detected entities.
@@ -102,49 +100,41 @@ async def datafog_scan(
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
 
-    config = _config_from(engine, entity_types)
+    config = _config_from(entity_types)
 
     try:
         content = read_text_file(path, config.max_bytes)
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
-    # datafog.engine.scan is synchronous
-    result = await asyncio.to_thread(
-        scan,
-        text=content.text,
-        engine=config.engine,
-        entity_types=list(config.entities),
-    )
+    found = await asyncio.to_thread(scan, content.text)
+    kept = [item for item in found if config.keeps(item.entity_type)]
 
     return render(
         mode=mode,
-        entities=result.entities,
+        findings=kept,
         path=str(content.path),
-        engine_used=result.engine_used,
     )
 
 
-async def _redact_to_file(
+async def _transform_to_file(
     path: str,
     output_path: str | None,
-    engine: str | None,
     entity_types: list[str] | None,
-    strategy: str,
+    strategy: Strategy,
 ) -> dict[str, Any]:
     """
-    Write a copy of a file with detected values replaced.
+    Write a copy of a file with detected values transformed.
 
     Parameters:
       path: The file to read.
       output_path: Where to write, or None for a sibling of the input.
-      engine: The detector engine, or None for the default.
-      entity_types: The types to replace, or None for the default.
-      strategy: The engine redaction strategy.
+      entity_types: The types to transform, or None for the default.
+      strategy: One of redact, mask, or remove.
     Returns:
       The tool response describing what was replaced.
     """
-    config = _config_from(engine, entity_types)
+    config = _config_from(entity_types)
 
     try:
         content = read_text_file(path, config.max_bytes)
@@ -152,33 +142,28 @@ async def _redact_to_file(
         raise ToolError(str(exc)) from exc
 
     source = content.path
+    suffix = _OUTPUT_SUFFIXES[strategy]
     destination = (
         Path(output_path)
         if output_path
-        else source.with_name(f"{source.stem}_{_OUTPUT_SUFFIXES[strategy]}{source.suffix}")
+        else source.with_name(f"{source.stem}_{suffix}{source.suffix}")
     )
 
-    result = await asyncio.to_thread(
-        scan_and_redact,
-        text=content.text,
-        engine=config.engine,
-        entity_types=list(config.entities),
-        strategy=strategy,
-    )
+    found = await asyncio.to_thread(scan, content.text)
+    kept = [item for item in found if config.keeps(item.entity_type)]
 
-    # RedactResult.mapping holds plaintext under every strategy, including mask.
-    # Only redacted_text is read.
+    result = await asyncio.to_thread(transform, content.text, kept, transform_config(strategy))
+
     try:
-        written = write_text_file(destination, result.redacted_text)
+        written = write_text_file(destination, result.text)
     except (WriteError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
-    return render_redaction(
-        entities=result.entities,
+    return render_transformation(
+        transformations=result.transformations,
         input_path=str(source),
         output_path=str(written),
         strategy=strategy,
-        engine=config.engine,
     )
 
 
@@ -186,79 +171,109 @@ async def _redact_to_file(
 async def datafog_redact(
     path: str,
     output_path: str | None = None,
-    engine: str | None = None,
     entity_types: list[str] | None = None,
 ) -> dict[str, Any]:
     """
-    Write a copy of a file with personal data masked out (redacted).
+    Write a copy of a file with personal data replaced by labels.
 
-    Masking replaces each detected value with asterisks of the same length. It
-    destroys the value and its type together: the copy shows that something was
-    removed, not what kind of thing it was. Use this when the removed values
-    never need to be told apart.
+    Each detected value becomes an unnumbered placeholder naming its kind, such
+    as [EMAIL]. The value is destroyed but the reader can still tell what sort
+    of thing was there. Every value of the same kind gets the same placeholder,
+    so two different emails are not distinguishable in the copy.
 
-    Use datafog_anonymize instead when the copy has to preserve which value was
-    which.
+    Use datafog_mask to hide the kind as well, or datafog_remove to leave no
+    trace that anything was there.
 
     The original file is not modified. This tool never returns the values it
-    replaced, so the coyp must be read to see the result.
+    replaced, so read the copy to see the result.
 
     Parameters:
       path: The file to read.
       output_path: Where to write. Defaults to a sibling of the input with a
       _redacted suffix.
-      engine: The detector engine to use. Defaults to "regex".
-      entity_types: The types to replace. Defaults to EMAIL, Phone, SSN,
-      CREDIT_CARD, DOB, and ZIP.
+      entity_types: The types to replace. Defaults to EMAIL, PHONE, SSN,
+      CREDIT_CARD, DATE, and ZIP_CODE.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
-    return await _redact_to_file(
+    return await _transform_to_file(
         path,
         output_path,
-        engine,
+        entity_types,
+        strategy="redact",
+    )
+
+
+@mcp.tool
+async def datafog_mask(
+    path: str,
+    output_path: str | None = None,
+    entity_types: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Write a copy of a file with personal data covered over.
+
+    Each detected value is replaced character for character, so the copy keeps
+    the original length and column alignment but reveals neither the value nor
+    what kind of value it was.
+
+    Use datafog_redact when the reader should still know what kind of thing was
+    removed.
+
+    The original file is not modified. This tool never returns the values it
+    replaced, so read the copy to see the result.
+
+    Parameters:
+      path: The file to read.
+      output_path: Where to write. Defaults to a sibling of the input with
+      a _masked suffix.
+      entity_types: The types to replace. Defaults to EMAIL, PHONE, SSN,
+      CREDIT_CARD, DATE, and ZIP_CODE.
+    Returns:
+      A dict with both paths, an entity count, and a tally per type.
+    """
+    return await _transform_to_file(
+        path,
+        output_path,
         entity_types,
         strategy="mask",
     )
 
 
 @mcp.tool
-async def datafog_anonymize(
+async def datafog_remove(
     path: str,
     output_path: str | None = None,
-    engine: str | None = None,
     entity_types: list[str] | None = None,
 ) -> dict[str, Any]:
     """
-    Write a copy of a file with personal data replaced by placeholders.
+    Write a copy of a file with personal data deleted outright.
 
-    Each detected value becomes a numbered placeholder like [EMAIL_1]. The
-    value is destroyed but its type survives, and two different values get two
-    different placeholders. Use this when the copy still has to support
-    reasoning about which value was which - counting distinct people, following
-    one person through a log.
+    Each detected value is cut from the text. Nothing marks where it was, so the
+    copy reads as though the data was never present and positions shift. This is
+    the only operation whose output cannot later be inspected to see what was
+    taken - the tool response is the only record.
 
-    Use datafog_redact instead when even the type should not survive.
+    Use datafog_mask to keep length and alignment, or datafog_redact to leave a
+    visible marker naming what was removed.
 
     The original file is not modified. This tool never returns the values it
-    replaced, and the placeholders cannot be reversed.
+    deleted.
 
     Parameters:
       path: The file to read.
-      output_path: Where to write. Defaults to a sibling of the input with an
-      _anonymized suffix.
-      engine: The detector engine to use. Defaults to "regex".
-      entity_types: The types to replace. Defaults to EMAIL, PHONE, SSN,
-      CREDIT_CARD, DOB, and ZIP.
+      output_path: Where to write. Defaults to a sibling of the input with
+      a _removed suffix.
+      entity_types: The types to delete. Defaults to EMAIL, PHONE, SSN,
+      CREDIT_CARD, DATE, and ZIP_CODE.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
-    return await _redact_to_file(
+    return await _transform_to_file(
         path,
         output_path,
-        engine,
         entity_types,
-        strategy="token",
+        strategy="remove",
     )
 
 
