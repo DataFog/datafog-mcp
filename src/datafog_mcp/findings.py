@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any, Literal, Protocol
+
 from datafog_core import Finding
 
 Mode = Literal[

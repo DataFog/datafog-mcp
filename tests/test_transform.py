@@ -1,4 +1,4 @@
-"""End-to-end tests for the redaction tools."""
+"""End-to-end tests for the transformation tools."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def export(tmp_path: Path) -> Path:
     """
     A copy of the Garmin fixture inside the test's own directory.
 
-    Redaction writes beside its input, so the checked-in fixture must
+    The tools write beside their input, so the checked-in fixture must
     not be the input.
 
     Returns:
@@ -55,8 +55,8 @@ def export(tmp_path: Path) -> Path:
     return destination
 
 
-def test_redact_writes_a_masked_sibling(export: Path) -> None:
-    """The copy lands beside the input with the identifiers masked."""
+def test_redact_writes_labelled_placeholders(export: Path) -> None:
+    """The copy names the kind of thing it removed."""
     result = _call("datafog_redact", path=str(export))
 
     written = Path(result["output_path"])
@@ -64,11 +64,39 @@ def test_redact_writes_a_masked_sibling(export: Path) -> None:
 
     assert written == export.with_name("garmin_export_redacted.csv")
     assert EMAIL not in text
+    assert "[EMAIL]" in text
+    assert "[PHONE]" in text
+    assert result["strategy"] == "redact"
+
+
+def test_mask_preserves_length(export: Path) -> None:
+    """Masking covers each value character for character."""
+    result = _call("datafog_mask", path=str(export))
+
+    written = Path(result["output_path"])
+    text = written.read_text(encoding="utf-8")
+
+    assert written == export.with_name("garmin_export_masked.csv")
     assert PHONE not in text
     assert "*" * len(PHONE) in text
+    assert result["strategy"] == "mask"
 
 
-def test_redact_leaves_the_input_alone(export: Path) -> None:
+def test_remove_leaves_no_trace(export: Path) -> None:
+    """Removal deletes the span without marking where it was."""
+    result = _call("datafog_remove", path=str(export))
+
+    written = Path(result["output_path"])
+    text = written.read_text(encoding="utf-8")
+
+    assert written == export.with_name("garmin_export_removed.csv")
+    assert EMAIL not in text
+    assert "[EMAIL]" not in text
+    assert "*" not in text
+    assert result["strategy"] == "remove"
+
+
+def test_the_input_is_left_alone(export: Path) -> None:
     """The original still contains what it always did."""
     before = export.read_text(encoding="utf-8")
 
@@ -77,40 +105,41 @@ def test_redact_leaves_the_input_alone(export: Path) -> None:
     assert export.read_text(encoding="utf-8") == before
 
 
-def test_anonymize_writes_placeholders(export: Path) -> None:
-    """Tokens preserve the type where masking would not."""
-    result = _call("datafog_anonymize", path=str(export))
-
-    written = Path(result["output_path"])
-    text = written.read_text(encoding="utf-8")
-
-    assert written == export.with_name("garmin_export_anonymized.csv")
-    assert EMAIL not in text
-    assert "[EMAIL_1]" in text
-
-
 def test_response_carries_no_matched_value(export: Path) -> None:
     """
     The tally says what was replaced, never what it was.
 
     Returning the values would put in context exactly what the
-    redaction just took out of the file.
+    transformation just took out of the file.
     """
     payload = json.dumps(_call("datafog_redact", path=str(export)))
 
     for value in (EMAIL, PHONE, POSTAL):
         assert value not in payload
 
-    assert "mapping" not in payload
-
 
 def test_response_counts_by_type(export: Path) -> None:
     """Counts are reported per entity type."""
-    result = _call("datafog_redact", path=str(export))
+    result = _call("datafog_mask", path=str(export))
 
-    assert result["counts"]["EMAIL"] >= 1
+    assert result["counts"]["EMAIL"] == 1
     assert result["entity_count"] == sum(result["counts"].values())
-    assert result["strategy"] == "mask"
+
+
+def test_entity_types_narrows_what_is_replaced(export: Path) -> None:
+    """
+    Only the requested types are transformed.
+
+    core detects every supported label and offers no way to narrow it,
+    so this exercises the filtering datafog-mcp does on the findings.
+    """
+    result = _call("datafog_redact", path=str(export), entity_types=["EMAIL"])
+
+    text = Path(result["output_path"]).read_text(encoding="utf-8")
+
+    assert "[EMAIL]" in text
+    assert PHONE in text
+    assert result["counts"] == {"EMAIL": 1}
 
 
 def test_explicit_output_path_is_honored(export: Path, tmp_path: Path) -> None:
@@ -124,12 +153,16 @@ def test_explicit_output_path_is_honored(export: Path, tmp_path: Path) -> None:
 
 
 def test_existing_output_is_not_overwritten(export: Path, tmp_path: Path) -> None:
-    """A redaction never clobbers a file that is already there."""
+    """A transformation never clobbers a file already there."""
     destination = tmp_path / "taken.csv"
     destination.write_text("keep me", encoding="utf-8")
 
     with pytest.raises(ToolError):
-        _call("datafog_redact", path=str(export), output_path=str(destination))
+        _call(
+            "datafog_redact",
+            path=str(export),
+            output_path=str(destination),
+        )
 
     assert destination.read_text(encoding="utf-8") == "keep me"
 
