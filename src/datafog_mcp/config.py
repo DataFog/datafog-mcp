@@ -5,7 +5,7 @@ Detection and transformation settings.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, get_args
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from datafog_core import _TransformationConfig
@@ -32,7 +32,6 @@ DEFAULT_ENTITIES: tuple[str, ...] = (
 )
 
 Strategy = Literal["mask", "redact", "remove"]
-VALID_STRATEGIES: frozenset[str] = frozenset(get_args(Strategy))
 
 DEFAULT_MAX_BYTES = 1_048_576
 
@@ -54,7 +53,7 @@ class ScanConfig:
             raise ValueError("entities must not be empty")
         unsupported = sorted(set(self.entities) - SUPPORTED_ENTITIES)
         if unsupported:
-            raise ValueError(f"unsupported entity types: {','.join(unsupported)}")
+            raise ValueError(f"unsupported entity types: {', '.join(unsupported)}")
         if self.max_bytes <= 0:
             raise ValueError("max_bytes must be positive")
 
