@@ -155,7 +155,7 @@ async def _transform_to_file(
     result = await asyncio.to_thread(transform, content.text, kept, transform_config(strategy))
 
     try:
-        written = write_text_file(destination, result.text)
+        written = write_text_file(destination, result.text, beside=source)
     except (WriteError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 

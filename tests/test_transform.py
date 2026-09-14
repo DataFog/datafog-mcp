@@ -11,6 +11,8 @@ import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
+from datafog_mcp import paths
+from datafog_mcp.paths import ALLOWED_ROOTS_VAR
 from datafog_mcp.server import mcp
 
 SOURCE = Path(__file__).parent / "data" / "garmin_export.csv"
@@ -171,3 +173,32 @@ def test_input_outside_the_roots_is_refused() -> None:
     """The policy applies to the tools, not just to reader."""
     with pytest.raises(ToolError):
         _call("datafog_redact", path="/etc/hosts")
+
+
+def test_tools_cannot_widen_their_own_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    The maintainer's escalation: write "/" into the roots file through
+    a transform, then have the next call read it as the policy.
+
+    Both layers must hold, and the policy must be unchanged afterward.
+    """
+    config = tmp_path / ".config" / "datafog"
+    config.mkdir(parents=True)
+    roots_file = config / "allowed_roots"
+    monkeypatch.setattr(paths, "ROOTS_FILE", roots_file)
+    monkeypatch.setenv(ALLOWED_ROOTS_VAR, str(tmp_path))
+
+    payload = tmp_path / "payload.txt"
+    payload.write_text("/\n", encoding="utf-8")
+
+    with pytest.raises(ToolError):
+        _call(
+            "datafog_redact",
+            path=str(payload),
+            output_path=str(roots_file),
+        )
+
+    assert not roots_file.exists()
+    assert paths.allowed_roots() == (tmp_path.resolve(),)

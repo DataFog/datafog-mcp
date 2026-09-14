@@ -179,13 +179,23 @@ def resolve_input(path: str) -> Path:
     return _check(Path(path).expanduser().resolve())
 
 
-def resolve_output(path: str) -> Path:
+def resolve_output(path: str, beside: Path) -> Path:
     """
     Resolve a path the server may write.
 
+    Outputs are confined to the directory of the input they derive from. The
+    configuration directory is refused outright too.
+
     Parameters:
         path: The requested path.
+        beside: The resolved input path whose directory bounds the output.
     Returns:
         The resolved path, when policy permits it.
     """
-    return _check(Path(path).expanduser().resolve())
+    resolved = _check(Path(path).expanduser().resolve())
+
+    if resolved.parent == ROOTS_FILE.parent:
+        raise PathNotAllowed(f"{resolved} is inside the server's configuration directory")
+    if resolved.parent != beside.parent:
+        raise PathNotAllowed(f"{resolved} must be in the same directory as {beside}")
+    return resolved

@@ -83,20 +83,21 @@ def read_text_file(path: str, max_bytes: int) -> FileContent:
     )
 
 
-def write_text_file(path: str | Path, text: str) -> Path:
+def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
     """
     Write text to a file the server is allowed to create.
 
-    Refuses to overwrite. A redaction that silently replaced its own input would
-    destroy the original.
+    Refuses to overwrite and refuses any destination outside the directory of
+    input it derives from.
 
     Parameters:
       path: Destination path.
       text: Content to write.
+      beside: The resolved input path bounding where output may go.
     Returns:
       The resolved path that was written.
     """
-    resolved = resolve_output(str(path))
+    resolved = resolve_output(str(path), beside)
 
     if resolved.exists():
         raise FileExists(f"{resolved} already exists.")

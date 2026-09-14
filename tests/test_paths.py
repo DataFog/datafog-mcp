@@ -93,15 +93,19 @@ def test_credential_directory_is_refused_regardless_of_case(
     Path.resolve() does not canonicalize case, so on APFS or NTFS
     ~/.SSH reaches the same directory as ~/.ssh. Folding on every
     platform makes this deterministic on Linux CI too.
+
+    The write check anchors beside a file in the same directory, so
+    the sibling rule passes and only the credential denial can raise.
     """
     _set_roots(monkeypatch, tmp_path)
     target = tmp_path / name / "id_ed25519"
+    beside = tmp_path / name / "known_hosts"
 
-    with pytest.raises(PathNotAllowed):
+    with pytest.raises(PathNotAllowed, match="credential"):
         resolve_input(str(target))
 
-    with pytest.raises(PathNotAllowed):
-        resolve_output(str(target))
+    with pytest.raises(PathNotAllowed, match="credential"):
+        resolve_output(str(target), beside)
 
 
 def test_several_roots_are_parsed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -141,9 +145,10 @@ def test_unset_variable_falls_back_to_home(
 def test_output_path_need_not_exist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A destination is resolved before anything is written to it."""
     _set_roots(monkeypatch, tmp_path)
+    source = tmp_path / "export.csv"
     destination = tmp_path / "export_redacted.csv"
 
-    assert resolve_output(str(destination)) == destination.resolve()
+    assert resolve_output(str(destination), source) == destination.resolve()
 
 
 def test_output_outside_every_root_is_refused(
@@ -153,9 +158,10 @@ def test_output_outside_every_root_is_refused(
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     _set_roots(monkeypatch, allowed)
+    source = allowed / "export.csv"
 
-    with pytest.raises(PathNotAllowed):
-        resolve_output(str(tmp_path / "escape.csv"))
+    with pytest.raises(PathNotAllowed, match="outside the allowed roots"):
+        resolve_output(str(tmp_path / "escape.csv"), source)
 
 
 def _write_roots_file(monkeypatch: pytest.MonkeyPatch, path: Path, body: str) -> None:
@@ -216,3 +222,39 @@ def test_tilde_in_the_file_is_expanded(tmp_path: Path, monkeypatch: pytest.Monke
     _write_roots_file(monkeypatch, tmp_path / "roots", "~\n")
 
     assert paths.policy().roots == (Path.home().resolve(),)
+
+
+def test_output_must_share_the_input_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A destination elsewhere inside the roots is still refused.
+
+    Confining output to the input's directory is what stops the write
+    tools from acting as a general file-creation primitive.
+    """
+    _set_roots(monkeypatch, tmp_path)
+    (tmp_path / "elsewhere").mkdir()
+    source = tmp_path / "export.csv"
+
+    with pytest.raises(PathNotAllowed, match="same directory"):
+        resolve_output(str(tmp_path / "elsewhere" / "out.csv"), source)
+
+
+def test_configuration_directory_is_never_a_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Even a sibling write is refused inside the config directory.
+
+    Covers an input that already lives there, which the sibling rule
+    alone would permit.
+    """
+    config = tmp_path / ".config" / "datafog"
+    config.mkdir(parents=True)
+    _set_roots(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "ROOTS_FILE", config / "allowed_roots")
+    source = config / "input.txt"
+
+    with pytest.raises(PathNotAllowed, match="configuration directory"):
+        resolve_output(str(config / "allowed_roots"), source)
