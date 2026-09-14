@@ -83,6 +83,27 @@ def test_credential_directory_is_refused_inside_a_root(
         resolve_input(str(tmp_path / ".ssh" / "id_ed25519"))
 
 
+@pytest.mark.parametrize("name", [".SSH", ".Ssh", ".GnuPG", "GCLOUD"])
+def test_credential_directory_is_refused_regardless_of_case(
+    name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Case variants of a denied name are refused, for reads and writes.
+
+    Path.resolve() does not canonicalize case, so on APFS or NTFS
+    ~/.SSH reaches the same directory as ~/.ssh. Folding on every
+    platform makes this deterministic on Linux CI too.
+    """
+    _set_roots(monkeypatch, tmp_path)
+    target = tmp_path / name / "id_ed25519"
+
+    with pytest.raises(PathNotAllowed):
+        resolve_input(str(target))
+
+    with pytest.raises(PathNotAllowed):
+        resolve_output(str(target))
+
+
 def test_several_roots_are_parsed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Every entry in the variable becomes a root."""
     first = tmp_path / "first"

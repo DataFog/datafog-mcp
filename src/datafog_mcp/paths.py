@@ -124,12 +124,15 @@ def _is_denied(resolved: Path) -> bool:
     """
     Report whether a path crosses a credential directory.
 
+    Components are casefolded before comparison to account for case-sensitive
+    filesystems.
+
     Parameters:
       resolved: An already-resolved absolute path.
     Returns:
       True if any component names a denied directory.
     """
-    return any(part in DENIED_DIR_NAMES for part in resolved.parts)
+    return any(part.casefold() in DENIED_DIR_NAMES for part in resolved.parts)
 
 
 def _within_allowed(resolved: Path) -> bool:
