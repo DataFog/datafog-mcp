@@ -258,3 +258,68 @@ def test_configuration_directory_is_never_a_destination(
 
     with pytest.raises(PathNotAllowed, match="configuration directory"):
         resolve_output(str(config / "allowed_roots"), source)
+
+
+def test_symlinked_config_directory_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    The config directory is recognized through a symlink to it.
+
+    The input already lives there, so the sibling rule passes and only
+    identity-based comparison can catch the destination.
+    """
+    real = tmp_path / "real_config"
+    real.mkdir()
+    link = tmp_path / ".config" / "datafog"
+    link.parent.mkdir()
+    link.symlink_to(real, target_is_directory=True)
+
+    _set_roots(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "ROOTS_FILE", link / "allowed_roots")
+    source = real / "input.txt"
+    source.write_text("/\n", encoding="utf-8")
+
+    with pytest.raises(PathNotAllowed, match="configuration directory"):
+        resolve_output(str(link / "allowed_roots"), source)
+
+
+def test_case_variant_config_directory_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    On a case-insensitive filesystem, .CONFIG/DATAFOG is the config
+    directory. Skipped where case matters, since there it is a
+    genuinely different directory.
+    """
+    (tmp_path / "CaseProbe").write_text("", encoding="utf-8")
+    if not (tmp_path / "caseprobe").exists():
+        pytest.skip("filesystem is case-sensitive")
+
+    config = tmp_path / ".config" / "datafog"
+    config.mkdir(parents=True)
+    _set_roots(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "ROOTS_FILE", config / "allowed_roots")
+    variant = tmp_path / ".CONFIG" / "DATAFOG"
+    source = variant / "input.txt"
+    source.write_text("/\n", encoding="utf-8")
+
+    with pytest.raises(PathNotAllowed, match="configuration directory"):
+        resolve_output(str(variant / "allowed_roots"), source)
+
+
+def test_sibling_check_accepts_a_symlinked_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A symlink to the input's directory is the input's directory."""
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real, target_is_directory=True)
+    _set_roots(monkeypatch, tmp_path)
+    source = real / "export.csv"
+    source.write_text("", encoding="utf-8")
+
+    result = resolve_output(str(link / "export_redacted.csv"), source)
+
+    assert result.parent == real.resolve()

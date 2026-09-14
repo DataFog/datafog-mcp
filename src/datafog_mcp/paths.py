@@ -164,6 +164,26 @@ def _check(resolved: Path) -> Path:
     return resolved
 
 
+def _same_directory(left: Path, right: Path) -> bool:
+    """
+    Report whether two paths name the same directory.
+
+    Uses .samefile to compare by device and inode instead of just spelling.
+    Therefore, a symlink and its target, or two case variants on a case-
+    insensitive filesystem, count as the same directory.
+
+    Parameters:
+      left: A directory path.
+      right: A directory path.
+    Returns:
+      True when both exist and are the same directory. Otherwise False.
+    """
+    try:
+        return left.samefile(right)
+    except OSError:
+        return False
+
+
 def resolve_input(path: str) -> Path:
     """
     Resolve a path the server may read.
@@ -193,9 +213,8 @@ def resolve_output(path: str, beside: Path) -> Path:
         The resolved path, when policy permits it.
     """
     resolved = _check(Path(path).expanduser().resolve())
-
-    if resolved.parent == ROOTS_FILE.parent:
+    if _same_directory(resolved.parent, ROOTS_FILE.parent):
         raise PathNotAllowed(f"{resolved} is inside the server's configuration directory")
-    if resolved.parent != beside.parent:
+    if not _same_directory(resolved.parent, beside.parent):
         raise PathNotAllowed(f"{resolved} must be in the same directory as {beside}")
     return resolved
