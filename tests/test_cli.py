@@ -199,3 +199,42 @@ def test_version_exits_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
         _run(monkeypatch, "--version")
 
     assert excinfo.value.code == 0
+
+
+def test_edit_splits_editor_arguments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    An editor with flags is run as a command, not a program name.
+
+    EDITOR="code --wait" is the common case that broke.
+    """
+    _use_roots_file(monkeypatch, tmp_path / "allowed_roots", "")
+    calls = _capture_editor(monkeypatch)
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.setenv("EDITOR", "code --wait")
+
+    _run(monkeypatch, "roots", "--edit")
+
+    assert calls[0] == ["code", "--wait", str(tmp_path / "allowed_roots")]
+
+
+def test_edit_honors_shell_quoting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A quoted path with a space survives as one argument."""
+    roots = tmp_path / "allowed_roots"
+    _use_roots_file(monkeypatch, roots, "")
+    calls = _capture_editor(monkeypatch)
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.setenv("EDITOR", '"/Applications/My Editor" -w')
+
+    _run(monkeypatch, "roots", "--edit")
+
+    assert calls[0] == ["/Applications/My Editor", "-w", str(roots)]
+
+
+def test_edit_reports_a_missing_editor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A nonexistent editor is one clear line, not a traceback."""
+    _use_roots_file(monkeypatch, tmp_path / "allowed_roots", "")
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.setenv("EDITOR", "no-such-editor-xyz")
+
+    with pytest.raises(SystemExit, match="editor not found"):
+        _run(monkeypatch, "roots", "--edit")

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import subprocess
 
 from . import __version__
@@ -69,7 +70,12 @@ def _edit_roots() -> None:
         ROOTS_FILE.write_text(ROOTS_TEMPLATE, encoding="utf-8")
 
     editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
-    subprocess.run([editor, str(ROOTS_FILE)], check=False)
+    command = [*shlex.split(editor), str(ROOTS_FILE)]
+
+    try:
+        subprocess.run(command, check=False)
+    except FileNotFoundError:
+        raise SystemExit(f"datafog-mcp: editor not found: {command[0]}") from None
 
 
 def main() -> None:
