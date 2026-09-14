@@ -87,8 +87,8 @@ def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
     """
     Write text to a file the server is allowed to create.
 
-    Refuses to overwrite and refuses any destination outside the directory of
-    input it derives from.
+    Creates exclusively. Refuses to overwrite and refuses any destination
+    outside the directory of input it derives from.
 
     Parameters:
       path: Destination path.
@@ -99,8 +99,10 @@ def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
     """
     resolved = resolve_output(str(path), beside)
 
-    if resolved.exists():
-        raise FileExists(f"{resolved} already exists.")
+    try:
+        with resolved.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+    except FileExistsError as exc:
+        raise FileExists(f"{resolved} already exists") from exc
 
-    resolved.write_text(text, encoding="utf-8")
     return resolved

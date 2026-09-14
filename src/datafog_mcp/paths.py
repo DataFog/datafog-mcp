@@ -212,9 +212,13 @@ def resolve_output(path: str, beside: Path) -> Path:
     Returns:
         The resolved path, when policy permits it.
     """
-    resolved = _check(Path(path).expanduser().resolve())
+    raw_path = Path(path).expanduser()
+    destination = raw_path.parent.resolve() / raw_path.name
+    resolved = _check(destination)
+
     if _same_directory(resolved.parent, ROOTS_FILE.parent):
         raise PathNotAllowed(f"{resolved} is inside the server's configuration directory")
     if not _same_directory(resolved.parent, beside.parent):
         raise PathNotAllowed(f"{resolved} must be in the same directory as {beside}")
+
     return resolved
