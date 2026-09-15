@@ -37,40 +37,39 @@ def _call(**arguments: Any) -> dict[str, Any]:
 def test_finds_profile_identifiers() -> None:
     """The header block's email, phone, and postal code are found."""
     result = _call(path=str(DATA))
-    values = {e["value"] for e in result["entities"]}
 
-    assert "jack.smith@example.com" in values
-    assert "415-555-0182" in values
-    assert "94117" in values
-    assert result["engine_used"] == "regex"
+    assert result["counts"]["EMAIL"] == 1
+    assert result["counts"]["PHONE"] == 1
+    assert result["counts"]["ZIP_CODE"] == 1
+    assert result["entity_count"] == sum(result["counts"].values())
 
 
-def test_does_not_return_file_contents() -> None:
+def test_does_not_return_file_contents_or_matched_values() -> None:
     """
-    Only matched substrings come back, never the file itself.
+    Neither the file nor what was found in it comes back.
 
     This is what makes path-based scanning worth doing: the agent
-    learns what is in the file without the file entering context.
+    learns what is in the file without any of it entering context.
     """
     payload = json.dumps(_call(path=str(DATA)))
 
     for unmatched in ["cycling", "swimming", "avg_hr", "28.4"]:
         assert unmatched not in payload
 
+    for matched in ["jack.smith@example.com", "415-555-0182", "94117"]:
+        assert matched not in payload
+
 
 def test_date_over_matches_activity_dates() -> None:
     """
     Activity dates register as DATE alongside the real birth date.
 
-    Documents a known precision gap. Suppressing it needs
-    allowlist_patterns, which is not wired up yet.
+    Documents a known precision gap: the file holds one date of birth
+    and several activity dates, and nothing distinguishes them.
     """
     result = _call(path=str(DATA))
-    dates = [e["value"] for e in result["entities"] if e["type"] == "DATE"]
 
-    assert "03/14/1987" in dates
-    assert "2026-08-01" in dates
-    assert len(dates) > 1
+    assert result["counts"]["DATE"] > 1
 
 
 def test_missing_file_reports_tool_error() -> None:

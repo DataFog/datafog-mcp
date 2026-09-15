@@ -7,11 +7,13 @@ from pathlib import Path
 import pytest
 
 from datafog_mcp.reader import (
+    FileExists,
     FileTooLarge,
     NotARegularFile,
     NotText,
     PathNotFound,
     read_text_file,
+    write_text_file,
 )
 
 _LIMIT = 1024
@@ -86,3 +88,40 @@ def test_invalid_utf8_without_nul_is_decoded(tmp_path: Path) -> None:
     result = read_text_file(str(target), _LIMIT)
 
     assert "Jos" in result.text
+
+
+def test_dangling_symlink_destination_is_refused(tmp_path: Path) -> None:
+    """
+    A symlink at the destination is not followed, even when dangling.
+
+    Path.exists() reports False for a dangling link, so a check-then-
+    write would follow it and create the target. Exclusive creation
+    refuses the link itself.
+    """
+    source = tmp_path / "input.txt"
+    source.write_text("", encoding="utf-8")
+    target = tmp_path / "planted_target"
+    link = tmp_path / "out.txt"
+    link.symlink_to(target)
+
+    with pytest.raises(FileExists):
+        write_text_file(link, "payload", beside=source)
+
+    assert not target.exists()
+
+
+def test_symlink_to_existing_file_is_not_written_through(
+    tmp_path: Path,
+) -> None:
+    """The link's target is untouched."""
+    source = tmp_path / "input.txt"
+    source.write_text("", encoding="utf-8")
+    target = tmp_path / "victim.txt"
+    target.write_text("original", encoding="utf-8")
+    link = tmp_path / "out.txt"
+    link.symlink_to(target)
+
+    with pytest.raises(FileExists):
+        write_text_file(link, "payload", beside=source)
+
+    assert target.read_text(encoding="utf-8") == "original"
