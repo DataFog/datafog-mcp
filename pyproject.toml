@@ -34,11 +34,6 @@ dev = [
     "coverage>=7.6.0",
 ]
 
-docs = [
-    "mkdocs>=1.6.0",
-    "mkdocs-material>=9.5.0",
-    "mkdocstrings[python]>=0.25.0",
-]
 
 [dependency-groups]
 dev = [
@@ -49,11 +44,6 @@ dev = [
     "pyright>=1.1.398",
     "pre-commit>=3.8.0",
     "coverage>=7.6.0",
-]
-docs = [
-    "mkdocs>=1.6.0",
-    "mkdocs-material>=9.5.0",
-    "mkdocstrings[python]>=0.25.0",
 ]
 ci = [
     "ruff>=0.8.0",
@@ -67,7 +57,7 @@ ci = [
 [project.urls]
 Homepage = "https://datafog.ai"
 Repository = "https://github.com/DataFog/datafog-mcp"
-Documentation = "https://docs.datafog.ai/mcp"
+Documentation = "https://docs.datafog.ai"
 
 [project.scripts]
 datafog-mcp = "datafog_mcp.__main__:main"
