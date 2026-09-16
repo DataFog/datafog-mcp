@@ -91,3 +91,9 @@ def test_unimplemented_mode_reports_tool_error() -> None:
     """summary is declared but not built, and says so."""
     with pytest.raises(ToolError):
         _call(path=str(DATA), mode="summary")
+
+
+def test_unsupported_entity_type_reports_tool_error() -> None:
+    """A bad entity_types value surfaces as a tool error, not a crash."""
+    with pytest.raises(ToolError, match="unsupported entity types"):
+        _call(path=str(DATA), entity_types=["PERSON"])
