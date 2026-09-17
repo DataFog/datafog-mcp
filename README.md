@@ -1,74 +1,81 @@
 # datafog-mcp
 
-An MCP server that lets an AI agent check a file for personally identifiable information (PII), and produce a cleaned copy, without the file's contents ever appearing in the tool's response.
+`datafog-mcp` is a Python MCP server that adds local PII scan and redaction tooling for AI agents.
 
-Detection runs locally on the [datafog-core](https://github.com/DataFog/datafog-core) engine. Nothing leaves the machine.
-
-**What this does and does not protect.** No tool response contains file contents or matched values, so "is this file sensitive" can be answered without the answer carrying the sensitive parts. That is the whole of the guarantee. Note that the agent can still open the file directly, and sometimes will.
-
-## Requirements
+## Prerequisites
 
 - Python 3.10+
-- [uv](https://docs.astral.sh/uv/)
+- [uv](https://docs.astral.sh/uv/) (recommended package manager)
 
-## Install
+## Install and run
 
-Not yet on PyPI. From a checkout:
-
-```bash
-uv tool install .
-```
-
-That puts `datafog-mcp` on your `PATH`. Register it with your MCP client.
-For Claude Code:
+Use `uv` as the primary developer/deployment workflow.
 
 ```bash
-claude mcp add --scope user datafog -- ~/.local/bin/datafog-mcp
-```
-
-Bare `datafog-mcp` runs the server over stdio; `datafog-mcp serve` is the same thing spelled out.
-
-## Tools
-
-Every tool takes a path and returns a path. None returns file contents or matched values.
-
-| Tool | What it does | Output |
-|---|---|---|
-| `datafog_scan` | Reports entity types, counts, and character offsets | — |
-| `datafog_redact` | Replaces each value with a label naming its kind, `[EMAIL]` | `name_redacted.ext` |
-| `datafog_mask` | Covers each value character for character, preserving length | `name_masked.ext` |
-| `datafog_remove` | Deletes each value outright, leaving no marker | `name_removed.ext` |
-
-The write tools create a sibling of the input and never modify the original. An existing file at the destination is never overwritten. `output_path` can name the file but not move it to another directory.
-
-Detected by default: `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `DATE`, `ZIP_CODE`. `IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set.
-
-## Where it may look
-
-Every read and write is checked against a set of allowed root directories. The default allowed root is the home directory.
-
-```bash
-datafog-mcp roots          # show the roots in force and where they came from
-datafog-mcp roots --edit   # open the roots file in $EDITOR
-```
-
-The file is `~/.config/datafog/allowed_roots`, one path per line. Edits take effect immediately so there's no need to restart or re-register. `DATAFOG_MCP_ALLOWED_ROOTS` (colon-separated) overrides the file when set, for installs that shouldn't be widened by editing a file.
-
-Always refused, even inside a root: `.ssh`, `.gnupg`, `.aws`, `.kube`, `gcloud`.
-
-A refused path returns a tool error naming the roots in force.
-
-## Development
-
-```bash
+# bootstrap editable install with dev dependencies
 uv sync --group dev
+
+# run the MCP server
+uv run datafog-mcp
+# or
+uv run datafog-mcp serve --transport stdio
+```
+
+## Dependency baseline
+
+The project starts with `datafog==4.3.0`.
+
+## Development workflow
+
+### Setup
+
+```bash
+uv sync --group dev --group docs
 uv run pre-commit install
 ```
 
+### Code quality
+
 ```bash
-uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pyright && uv run pytest
+uv run ruff check .
+uv run ruff format .
+uv run mypy
+uv run pyright
+uv run pytest
 ```
 
-## License
+### Pre-commit
 
-MIT
+```bash
+pre-commit run --all-files
+```
+
+## Documentation
+
+```bash
+uv run mkdocs serve
+```
+
+Then open <http://127.0.0.1:8000>.
+
+## Repository layout
+
+```text
+datafog-mcp/
+├── src/datafog_mcp/
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── config.py
+│   ├── proxy.py
+│   ├── server.py
+├── tests/
+├── docs/
+├── datafog-mcp.toml
+├── pyproject.toml
+├── README.md
+├── ROADMAP.md
+```
+
+## Roadmap and spec
+
+See `ROADMAP.md` for implementation tracking against the product spec.
