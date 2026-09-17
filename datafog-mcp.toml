@@ -1,8 +1,0 @@
-[server]
-engine = "smart"
-strategy = "token"
-
-[proxy]
-intercept_tool_responses = true
-intercept_tool_arguments = true
-intercept_resources = false
