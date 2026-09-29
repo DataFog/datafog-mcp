@@ -41,7 +41,15 @@ Every tool takes a path and returns a path. None returns file contents or matche
 
 The write tools create a sibling of the input and never modify the original. An existing file at the destination is never overwritten. `output_path` can name the file but not move it to another directory.
 
-Detected by default: `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `DATE`, `ZIP_CODE`. `IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set.
+Detected by default:
+
+- **Personal data** — `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `DATE`, `ZIP_CODE`
+- **Financial and health identifiers** — `US_ROUTING_NUMBER`, `NPI`
+- **Credentials** — `API_KEY`, `BEARER_TOKEN`, `JWT`, `CREDENTIAL_URI`, `PRIVATE_KEY`
+
+`IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set.
+
+Credential detection covers common formats. It is not a substitute for a dedicated secret scanner, and a clean result is not proof a file holds no secrets.
 
 ## Where it may look
 
