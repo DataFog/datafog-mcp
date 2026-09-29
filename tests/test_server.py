@@ -60,6 +60,32 @@ def test_does_not_return_file_contents_or_matched_values() -> None:
         assert matched not in payload
 
 
+def test_reports_credentials_without_their_values(tmp_path: Path) -> None:
+    """
+    Credentials are detected, and neither value reaches the response.
+
+    Guards against engine types being silently filtered. Before the
+    supported set was read from the engine, a type core could report but
+    this server did not list was dropped without a trace.
+
+    The key is assembled at runtime so no scannable literal lands in the
+    repository.
+    """
+    key = "sk_" + "test_" + "4eC39HqLyjWDarjtT1zdp7dc"
+    env = tmp_path / "app.env"
+    env.write_text(
+        f"API_KEY={key}\nDATABASE_URL=postgres://admin:hunter2@db.example.com:5432/prod\n"
+    )
+
+    result = _call(path=str(env))
+    payload = json.dumps(result)
+
+    assert result["counts"]["API_KEY"] == 1
+    assert result["counts"]["CREDENTIAL_URI"] == 1
+    assert key not in payload
+    assert "hunter2" not in payload
+
+
 def test_date_over_matches_activity_dates() -> None:
     """
     Activity dates register as DATE alongside the real birth date.

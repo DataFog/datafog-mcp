@@ -47,6 +47,21 @@ def test_unsupported_entities_are_named() -> None:
         ScanConfig(entities=("EMAIL", "SECRET", "PERSON"))
 
 
+@pytest.mark.parametrize("entity", ["PERSON", "UUID", "DE_IBAN"])
+def test_types_a_text_scan_cannot_report_are_unsupported(entity: str) -> None:
+    """
+    Types the engine knows but a plain text scan never reports are refused.
+
+    PERSON needs structured input, UUID a config flag, and DE_IBAN a locale.
+    The server passes none of these, so accepting them would return an empty
+    result reported as success.
+
+    Parameters:
+      entity: A type core lists but scan(text) cannot report.
+    """
+    assert entity not in SUPPORTED_ENTITIES
+
+
 def test_non_positive_max_bytes_is_rejected() -> None:
     """A zero or negative cap would refuse every file."""
     with pytest.raises(ValueError, match="max_bytes must be positive"):

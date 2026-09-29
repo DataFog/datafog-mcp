@@ -27,10 +27,11 @@ mcp = FastMCP(
     name="datafog",
     version="0.1.0",
     instructions=(
-        "Local PII detection and transformation. Scans files on disk "
-        "for emails, phone numbers, SSNs, credit card numbers, dates, "
-        "and ZIP codes, and can write a transformed copy. Runs "
-        "locally. No data is sent anywhere."
+        "Local PII and credential detection and transformation. Scans "
+        "files on disk for emails, phone numbers, SSNs, credit card "
+        "numbers, dates, ZIP codes, bank routing numbers, NPIs, API "
+        "keys, tokens, and private keys, and can write a transformed "
+        "copy. Runs locally. No data is sent anywhere."
     ),
 )
 
@@ -81,14 +82,20 @@ async def datafog_scan(
     for has already happened. Reading afterward is fine; reading before is not.
 
     WHEN NOT TO CALL IT: source code, configuration tracked in the project's
-    repository, lockfiles, or build output. It detects structured identifiers,
-    not secrets - it will not find API keys, tokens, or private keys.
+    repository, lockfiles, or build output.
+
+    It also detects common credentials - API keys, bearer tokens, JWTs,
+    credentials embedded in URIs, and PEM private keys - but is not a
+    substitute for a dedicated secret scanner. A clean result means none of
+    these detectors matched, not that the file holds no secrets.
 
     Parameters:
       path: The path of the file to scan.
       mode: What to return.
-      entity_types: The types to look for. Default to EMAIL, PHONE, SSN,
-      CREDIT_CARD, DATE, and ZIP_CODE.
+      entity_types: The types to look for. Defaults to API_KEY, BEARER_TOKEN,
+      CREDENTIAL_URI, CREDIT_CARD, DATE, EMAIL, JWT, NPI, PHONE, PRIVATE_KEY,
+      SSN, US_ROUTING_NUMBER, and ZIP_CODE. IP_ADDRESS is available on
+      request.
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
       detected entities.
@@ -191,8 +198,8 @@ async def datafog_redact(
       path: The file to read.
       output_path: Where to write. Defaults to a sibling of the input with a
       _redacted suffix.
-      entity_types: The types to replace. Defaults to EMAIL, PHONE, SSN,
-      CREDIT_CARD, DATE, and ZIP_CODE.
+      entity_types: The types to replace. Defaults to the same types as
+      datafog_scan.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -227,8 +234,8 @@ async def datafog_mask(
       path: The file to read.
       output_path: Where to write. Defaults to a sibling of the input with
       a _masked suffix.
-      entity_types: The types to replace. Defaults to EMAIL, PHONE, SSN,
-      CREDIT_CARD, DATE, and ZIP_CODE.
+      entity_types: The types to replace. Defaults to the same types as
+      datafog_scan.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -264,8 +271,8 @@ async def datafog_remove(
       path: The file to read.
       output_path: Where to write. Defaults to a sibling of the input with
       a _removed suffix.
-      entity_types: The types to delete. Defaults to EMAIL, PHONE, SSN,
-      CREDIT_CARD, DATE, and ZIP_CODE.
+      entity_types: The types to delete. Defaults to the same types as
+      datafog_scan.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """

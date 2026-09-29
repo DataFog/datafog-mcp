@@ -14,7 +14,7 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "caio", version = "0.9.25", source = { registry = "https://pypi.org/simple" } },
+    { name = "caio", version = "0.9.25", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/67/e2/d7cb819de8df6b5c1968a2756c3cb4122d4fa2b8fc768b53b7c9e5edb646/aiofile-3.9.0.tar.gz", hash = "sha256:e5ad718bb148b265b6df1b3752c4d1d83024b93da9bd599df74b9d9ffcf7919b", size = 17943, upload-time = "2024-10-08T10:39:35.846Z" }
 wheels = [
@@ -29,7 +29,7 @@ resolution-markers = [
     "python_full_version >= '3.11'",
 ]
 dependencies = [
-    { name = "caio", version = "0.12.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "caio", version = "0.12.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/14/31/edb06aabd8f8f0b56d659f30800795f40b93cba96be946ce179f6931e3a5/aiofile-3.12.3.tar.gz", hash = "sha256:caa6aa746b5e47e2165f7abd741b6415e49cf4d44fddc0f61844612cc3924d41", size = 21600, upload-time = "2026-08-04T22:59:27.171Z" }
 wheels = [
@@ -590,15 +590,15 @@ wheels = [
 
 [[package]]
 name = "datafog-core"
-version = "0.3.1"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ec/42/18a94f66c2296b34ebeca6a9b3b96bbd8fdcf63803cff26569a54b642ba1/datafog_core-0.3.1.tar.gz", hash = "sha256:4fc117785726d03855256e36a1873a71794e4dfb4c6d4b8ff2addea13056e460", size = 73964, upload-time = "2026-09-09T01:59:37.074Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/30/11/a64512c879105718d01d704492cefd46fa1301e402764eb7ebe13459ddb2/datafog_core-0.4.1.tar.gz", hash = "sha256:74a8f545ccfff8d52a149ac9bc02cd6cc8295e883cd36cbb96b6b5f460f35807", size = 108322, upload-time = "2026-09-29T00:01:24.068Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/bb/79e6c929ce471b610f668c5a428ac7e303290f943610256eaa251d12cbb4/datafog_core-0.3.1-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:a139bdd1c016e74aa0b77d1db41c057fc144ab68848fe6a7120e3de505059324", size = 1589584, upload-time = "2026-09-09T01:59:28.667Z" },
-    { url = "https://files.pythonhosted.org/packages/b2/85/2f8f92245552e4a9aa0023a06fd8731ecb4f074ff5dc63c128c7480211a6/datafog_core-0.3.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:ce37d9a00ac1c8626c6ca9fe8af4b7c12c7bd011b8169bbfe1a8e893ca2e7eec", size = 1526015, upload-time = "2026-09-09T01:59:30.338Z" },
-    { url = "https://files.pythonhosted.org/packages/ed/06/7a1db9ee0215d0c51a826fe900823e497f43d64655b18c00bfa1c4d683c5/datafog_core-0.3.1-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:dcb39106247325be6bdc1443d7a56e59f10d868fe2786187d26756be9bc4190f", size = 1691956, upload-time = "2026-09-09T01:59:32.256Z" },
-    { url = "https://files.pythonhosted.org/packages/06/e0/4af72f66f932246f2b97584a6aba8dad441ce81e7064f9b98616470e60de/datafog_core-0.3.1-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:8bc8293f9175781574dd626ebed4776224837e93e90a239ba6d3231cb8bed470", size = 1762325, upload-time = "2026-09-09T01:59:33.798Z" },
-    { url = "https://files.pythonhosted.org/packages/22/a8/dee9e04e1cb8e509d140f1be6fd8719740d057e05b1836944c22ffe580b7/datafog_core-0.3.1-cp310-abi3-win_amd64.whl", hash = "sha256:adca9d9227ec7e3971b64a98f3a499503b817abec5038b5811ba03ddde78e68a", size = 1384955, upload-time = "2026-09-09T01:59:35.638Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/73/e0dd031f265270cf43275ee3eacd33c815c47a7c6015756b98d4ba932810/datafog_core-0.4.1-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:6ca693db39f047c84f66619ee0d02991cf6b014b296e128ccb382470f547f765", size = 1646630, upload-time = "2026-09-29T00:01:15.878Z" },
+    { url = "https://files.pythonhosted.org/packages/82/4d/10a0a3dd2d3dfdbd09ca335449c626f1d1292cb94fb8629e9f72a80ffda8/datafog_core-0.4.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:2f18f93854ae335b3e12de52b61c29b7013ff03e601bf67380cb09712ecef5cb", size = 1575976, upload-time = "2026-09-29T00:01:17.36Z" },
+    { url = "https://files.pythonhosted.org/packages/19/c3/2977e4960e33199074c6a214cfa1fa651fb231d29b4c478598ac69aeae1a/datafog_core-0.4.1-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:bd6d0568143100ffca0867081840f0c19e8f3853bbf9ca906f054f57b9114ae0", size = 1749058, upload-time = "2026-09-29T00:01:18.855Z" },
+    { url = "https://files.pythonhosted.org/packages/83/22/906662feea899c2eefb62ec9756e7fc8eec88bfbc91b820c864c4076dc2e/datafog_core-0.4.1-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:1d1fd7b5048980cdfa7b6f2edcf6ed89ae561c9ba917a08a023f8d7bd24561d6", size = 1821777, upload-time = "2026-09-29T00:01:20.695Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/5d/cd6e2564d08e2c0dcd8cb7569e22df5d6f18fab06548915f421bc62d75f7/datafog_core-0.4.1-cp310-abi3-win_amd64.whl", hash = "sha256:2e2b0badc61fae9c7b77d0776424d3a28e2e0c3ad7f151eaf56df219d763c1b2", size = 1434389, upload-time = "2026-09-29T00:01:22.714Z" },
 ]
 
 [[package]]
@@ -644,7 +644,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.6.0" },
-    { name = "datafog-core", specifier = ">=0.3,<0.4" },
+    { name = "datafog-core", specifier = ">=0.4.1,<0.5" },
     { name = "fastmcp", specifier = ">=3,<4" },
     { name = "mcp", specifier = ">=1.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.0" },

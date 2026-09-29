@@ -7,27 +7,49 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+from datafog_core import capabilities
+
 if TYPE_CHECKING:
     from datafog_core import _TransformationConfig
 
-SUPPORTED_ENTITIES: frozenset[str] = frozenset(
-    {
-        "CREDIT_CARD",
-        "DATE",
-        "EMAIL",
-        "IP_ADDRESS",
-        "PHONE",
-        "SSN",
-        "ZIP_CODE",
-    }
-)
 
+def _text_scan_entities() -> frozenset[str]:
+    """
+    Ask the engine which types a plain text scan can report.
+
+    Only default-activated, text-scoped types qualify. The server calls
+    scan(text) with no config, so a type that needs a locale, a config flag,
+    or structured input would never fire. Accepting one would let a caller
+    request it and get an empty result reported as success.
+
+    Returns:
+      The entity types scan(text) can report.
+    """
+    return frozenset(
+        name
+        for name, capability in capabilities()["entities"].items()
+        if capability["activation"]["kind"] == "default" and "text" in capability["scopes"]
+    )
+
+
+SUPPORTED_ENTITIES: frozenset[str] = _text_scan_entities()
+
+# Which types are on by default is a product decision, so this stays
+# explicit rather than following the engine's list. IP_ADDRESS is
+# supported but opt-in.
 DEFAULT_ENTITIES: tuple[str, ...] = (
+    "API_KEY",
+    "BEARER_TOKEN",
+    "CREDENTIAL_URI",
     "CREDIT_CARD",
     "DATE",
     "EMAIL",
+    "JWT",
+    "NPI",
     "PHONE",
+    "PRIVATE_KEY",
     "SSN",
+    "US_ROUTING_NUMBER",
     "ZIP_CODE",
 )
 
