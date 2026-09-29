@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,7 @@ from datafog_mcp.reader import (
 mcp = FastMCP(
     name="datafog",
     version="0.1.0",
+    mask_error_details=True,
     instructions=(
         "Local PII and credential detection and transformation. Scans "
         "files on disk for emails, phone numbers, SSNs, credit card "
@@ -40,6 +43,34 @@ _OUTPUT_SUFFIXES: dict[Strategy, str] = {
     "mask": "masked",
     "remove": "removed",
 }
+
+
+@contextmanager
+def _contained() -> Iterator[None]:
+    """
+    Replace any unexpected failure with an error that carries no content.
+
+    FastMCP logs any exception other than ToolError with its message and
+    traceback, and masking only changes what the client sees. Engine and I/O
+    messages may quote the file being processed, so an unexpected exception is
+    replaced with one naming only its type. `from None` drops the original
+    from the chain, so no traceback can reach it either.
+
+    Deliberate ToolErrors pass through untouched, since their messages are
+    written to be shown.
+
+    Returns:
+      A context manager guarding the enclosed block.
+    """
+    try:
+        yield
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"datafog failed with {type(exc).__name__}; details are withheld "
+            "because they may contain file content"
+        ) from None
 
 
 def _config_from(entity_types: list[str] | None) -> ScanConfig:
@@ -100,7 +131,25 @@ async def datafog_scan(
       A dict with the scanned path, an entity count, a tally per type, and the
       detected entities.
     """
+    with _contained():
+        return await _scan_file(path, mode, entity_types)
 
+
+async def _scan_file(
+    path: str,
+    mode: Mode,
+    entity_types: list[str] | None,
+) -> dict[str, Any]:
+    """
+    Scan a file and build the response.
+
+    Parameters:
+      path: The file to scan.
+      mode: What to return.
+      entity_types: The types to keep, or None for the default.
+    Returns:
+      The tool response describing what was found.
+    """
     # Deliberate validation order: mode, then config, then file read
     try:
         validate_mode(mode)
@@ -203,12 +252,13 @@ async def datafog_redact(
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
-    return await _transform_to_file(
-        path,
-        output_path,
-        entity_types,
-        strategy="redact",
-    )
+    with _contained():
+        return await _transform_to_file(
+            path,
+            output_path,
+            entity_types,
+            strategy="redact",
+        )
 
 
 @mcp.tool
@@ -239,12 +289,13 @@ async def datafog_mask(
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
-    return await _transform_to_file(
-        path,
-        output_path,
-        entity_types,
-        strategy="mask",
-    )
+    with _contained():
+        return await _transform_to_file(
+            path,
+            output_path,
+            entity_types,
+            strategy="mask",
+        )
 
 
 @mcp.tool
@@ -276,12 +327,13 @@ async def datafog_remove(
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
-    return await _transform_to_file(
-        path,
-        output_path,
-        entity_types,
-        strategy="remove",
-    )
+    with _contained():
+        return await _transform_to_file(
+            path,
+            output_path,
+            entity_types,
+            strategy="remove",
+        )
 
 
 def run_server() -> None:

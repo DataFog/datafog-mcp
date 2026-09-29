@@ -6,6 +6,14 @@ Detection runs locally on the [datafog-core](https://github.com/DataFog/datafog-
 
 **What this does and does not protect.** No tool response contains file contents or matched values, so "is this file sensitive" can be answered without the answer carrying the sensitive parts. That is the whole of the guarantee. Note that the agent can still open the file directly, and sometimes will.
 
+The guarantee holds when a tool fails, too. An unexpected error returns only its type, such as `datafog failed with RuntimeError`, and its details are kept out of both the response and the server's log.
+
+What responses do carry:
+
+- **Paths.** Every response names the files it read and wrote, and errors name the path they refused. A filename like `jane_doe_lab_results.csv` identifies a person on its own.
+- **Metadata.** Entity types, per-type counts, and character offsets. These reveal that a file holds, say, two email addresses at known positions, without revealing the addresses.
+- **Allowed roots.** A refused path returns the configured roots, which name directories on your machine.
+
 ## Requirements
 
 - Python 3.10+
