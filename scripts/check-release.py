@@ -7,8 +7,12 @@ so release notes are written before the release rather than after. Any other
 run, such as a TestPyPI rehearsal, needs only an entry for the version, which
 may not be dated yet.
 
-Needs Python 3.11 or later for tomllib; the workflow runs it on the runner's
-system Python.
+When run in GitHub Actions, it also writes the version to $GITHUB_OUTPUT, so
+later jobs test exactly the version checked here without reading
+pyproject.toml themselves.
+
+Needs Python 3.11 or later for tomllib. The workflow runs it with uv on 3.12
+rather than whichever python3 is on PATH.
 """
 
 from __future__ import annotations
@@ -29,6 +33,11 @@ def main() -> None:
     """
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     version = pyproject["project"]["version"]
+
+    # Written to $GITHUB_OUTPUT below, where a newline could inject outputs
+    if not re.fullmatch(r"[0-9A-Za-z.+!_-]+", version):
+        sys.exit(f"pyproject.toml version {version!r} is not a plain version string")
+
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     tagged = os.environ.get("GITHUB_REF_TYPE") == "tag"
 
@@ -46,6 +55,11 @@ def main() -> None:
     if not re.search(entry, changelog, re.MULTILINE):
         kind = "dated entry" if tagged else "entry"
         sys.exit(f"CHANGELOG.md has no {kind} for {version}; add '## [{version}] - YYYY-MM-DD'")
+
+    output = os.environ.get("GITHUB_OUTPUT")
+    if output:
+        with open(output, "a", encoding="utf-8") as handle:
+            handle.write(f"version={version}\n")
 
     print(f"release {version}: tag, version, and changelog agree")
 

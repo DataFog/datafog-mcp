@@ -34,6 +34,8 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,7 +46,8 @@ jobs:
           python-version: "3.12"
 
       - name: Check the tag, version, and changelog agree
-        run: python3 scripts/check-release.py
+        id: release
+        run: uv run --no-project --python 3.12 scripts/check-release.py
 
       # uv builds the sdist first and then the wheel from the sdist, so a
       # file missing from the sdist fails here rather than for a user.
@@ -97,11 +100,14 @@ jobs:
           uv venv "$RUNNER_TEMP/venv" --python ${{ matrix.python-version }}
           uv pip install --python "$RUNNER_TEMP/venv/bin/python" dist/*.whl
 
+      # The version comes from the build job, which checked it, and reaches
+      # the script through the environment rather than ${{ }} expansion,
+      # since a pull request controls pyproject.toml.
       - name: Smoke test the installed server over stdio
         working-directory: ${{ runner.temp }}
-        run: |
-          version=$(python3 -c "import tomllib, sys; print(tomllib.load(open(sys.argv[1], 'rb'))['project']['version'])" "$GITHUB_WORKSPACE/pyproject.toml")
-          "$RUNNER_TEMP/venv/bin/python" "$GITHUB_WORKSPACE/scripts/smoke_installed.py" "$version"
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: '"$RUNNER_TEMP/venv/bin/python" "$GITHUB_WORKSPACE/scripts/smoke_installed.py" "$VERSION"'
 
   publish-testpypi:
     name: Publish to TestPyPI
