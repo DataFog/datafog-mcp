@@ -108,6 +108,12 @@ uv run pre-commit install
 uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pyright && uv run pytest
 ```
 
+Runtime dependencies are audited for known advisories weekly, on every push to `main`, and on any pull request that changes them. To run the same audit of the locked dependencies locally:
+
+```bash
+uv export --frozen --no-dev --no-emit-project -o locked.txt && uvx pip-audit --disable-pip -r locked.txt
+```
+
 ## License
 
 MIT

@@ -1,0 +1,78 @@
+name: Dependency audit
+
+# Checks runtime dependencies against known advisories. Dev tools are not
+# shipped, so they are not audited here.
+#
+# Two graphs are audited because they differ:
+#   locked - uv.lock, which CI tests against.
+#   fresh  - what `pip install datafog-mcp` resolves today, without the lock.
+#            A user never sees our lockfile, so this is what they actually run.
+#
+# Advisories are published without any change on our side, so this also runs
+# weekly. A pull request is only audited when it touches dependencies, so an
+# unrelated change is never blocked by a new upstream advisory.
+#
+# Accepting a finding: if an advisory has no fix and its vulnerable code is
+# unreachable from this server, add `--ignore-vuln <ID>` to the affected step
+# with a comment giving the reason. Do not ignore a finding that has a fix.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/audit.yml
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  locked:
+    name: Locked graph
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Export locked runtime dependencies
+        run: uv export --frozen --no-dev --no-emit-project --format requirements-txt -o locked.txt
+
+      - name: Audit
+        run: uvx --from 'pip-audit>=2.9,<3' pip-audit --disable-pip -r locked.txt
+
+  fresh:
+    name: Fresh install (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Resolve runtime dependencies without the lockfile
+        run: >-
+          uv pip compile pyproject.toml
+          --python-version ${{ matrix.python-version }}
+          --generate-hashes
+          -o fresh.txt
+
+      - name: Audit
+        run: uvx --from 'pip-audit>=2.9,<3' pip-audit --disable-pip -r fresh.txt
