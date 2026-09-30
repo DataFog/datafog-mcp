@@ -77,18 +77,25 @@ A refusal is not a clean result. It means the file was not checked.
 
 ## Where it may look
 
-Every read and write is checked against a set of allowed root directories. The default allowed root is the home directory.
+Every read and write is checked against a set of allowed root directories. With no roots file and no override, the allowed root is your home directory.
 
 ```bash
 datafog-mcp roots          # show the roots in force and where they came from
 datafog-mcp roots --edit   # open the roots file in $EDITOR
 ```
 
-The file is `~/.config/datafog/allowed_roots`, one path per line. Edits take effect immediately so there's no need to restart or re-register. `DATAFOG_MCP_ALLOWED_ROOTS` (colon-separated) overrides the file when set, for installs that shouldn't be widened by editing a file.
+The file is `~/.config/datafog/allowed_roots`, one absolute path per line, with `~` expanded. Edits take effect immediately, so there's no need to restart or re-register. `roots --edit` creates the file starting from `~`, so creating it changes nothing until you narrow it.
+
+`DATAFOG_MCP_ALLOWED_ROOTS` (colon-separated) overrides the file whenever it is set, for installs that shouldn't be widened by editing a file.
+
+A configured policy never falls back to the default:
+
+- **An empty policy refuses every path.** A file that lists no directories, or a variable set to an empty value, locks the server down rather than reverting to your home directory. Delete the file or unset the variable to return to the default.
+- **A malformed policy refuses every path and says why.** A relative path, an unreadable file, or something other than a regular file at the file's location is an error, not an absence. Relative paths are refused because they would resolve against whichever directory your MCP client launched the server from.
 
 Always refused, even inside a root: `.ssh`, `.gnupg`, `.aws`, `.kube`, `gcloud`.
 
-A refused path returns a tool error naming the roots in force.
+A refused path returns a tool error naming the roots in force, or why the policy can't be used.
 
 ## Development
 
