@@ -103,8 +103,8 @@ async def datafog_scan(
     context.
 
     WHEN TO CALL THIS: before the first read of any file that might contain
-    personal data - exports, downloads, spreadsheets, logs, database dumps,
-    backups, or anything the user obtained from a third-party service. Call it
+    personal data - CSV and other text exports, downloads, logs, SQL dumps, or
+    anything the user obtained from a third-party service. Call it
     regardless of what the user asked for. A request to analyze, summarize,
     convert, or upload a file is as much a trigger as a request to check it for
     PII.
@@ -116,6 +116,12 @@ async def datafog_scan(
 
     WHEN NOT TO CALL IT: source code, configuration tracked in the project's
     repository, lockfiles, or build output.
+
+    INPUTS: UTF-8 text files up to 1 MiB, such as CSV, TSV, JSON, logs, and
+    plain text. Other encodings, binary files, and larger files are refused
+    with an error rather than scanned. XLSX, PDF, DOCX, images, and archives
+    are binary and are not parsed. A refusal is not a clean result: the file
+    was not checked.
 
     It also detects common credentials - API keys, bearer tokens, JWTs,
     credentials embedded in URIs, and PEM private keys - but is not a
@@ -246,7 +252,7 @@ async def datafog_redact(
     replaced, so read the copy to see the result.
 
     Parameters:
-      path: The file to read.
+      path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
       output_path: Where to write. Defaults to a sibling of the input with a
       _redacted suffix.
       entity_types: The types to replace. Defaults to the same types as
@@ -283,7 +289,7 @@ async def datafog_mask(
     replaced, so read the copy to see the result.
 
     Parameters:
-      path: The file to read.
+      path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
       output_path: Where to write. Defaults to a sibling of the input with
       a _masked suffix.
       entity_types: The types to replace. Defaults to the same types as
@@ -321,7 +327,7 @@ async def datafog_remove(
     deleted.
 
     Parameters:
-      path: The file to read.
+      path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
       output_path: Where to write. Defaults to a sibling of the input with
       a _removed suffix.
       entity_types: The types to delete. Defaults to the same types as

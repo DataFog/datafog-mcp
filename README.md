@@ -63,6 +63,18 @@ Detected by default:
 
 Credential detection covers common formats. It is not a substitute for a dedicated secret scanner, and a clean result is not proof a file holds no secrets.
 
+## Supported files
+
+UTF-8 text, up to 1 MiB (1,048,576 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. Detection reads the file as flat text, so it finds values anywhere in it but has no notion of columns or fields.
+
+Refused with an error, never scanned:
+
+- **Other encodings.** UTF-16, UTF-32, Latin-1, and so on. Convert to UTF-8 first. A UTF-8 byte-order mark, as Excel writes, is fine and is kept in the copy.
+- **Binary files.** XLSX, PDF, DOCX, images, and archives such as ZIP are not parsed. Export to CSV or text first.
+- **Anything over 1 MiB.**
+
+A refusal is not a clean result. It means the file was not checked.
+
 ## Where it may look
 
 Every read and write is checked against a set of allowed root directories. The default allowed root is the home directory.
