@@ -12,6 +12,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
+from datafog_mcp import __version__
 from datafog_mcp.config import SUPPORTED_ENTITIES, ScanConfig, Strategy, transform_config
 from datafog_mcp.findings import (
     Mode,
@@ -39,7 +40,7 @@ EntitySelection = Annotated[list[EntityType], Field(min_length=1)] | None
 
 mcp = FastMCP(
     name="datafog",
-    version="0.1.0",
+    version=__version__,
     mask_error_details=True,
     instructions=(
         "Local PII and credential detection and transformation. Scans "

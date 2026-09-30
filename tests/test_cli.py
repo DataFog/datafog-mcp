@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -264,6 +265,22 @@ def test_version_exits_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
         _run(monkeypatch, "--version")
 
     assert excinfo.value.code == 0
+
+
+def test_version_reports_the_installed_version(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """
+    --version prints the installed package's version.
+
+    Parameters:
+      monkeypatch: Supplies argv.
+      capsys: Captures the printed version.
+    """
+    with pytest.raises(SystemExit):
+        _run(monkeypatch, "--version")
+
+    assert capsys.readouterr().out.strip() == f"datafog-mcp {version('datafog-mcp')}"
 
 
 def test_edit_splits_editor_arguments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
