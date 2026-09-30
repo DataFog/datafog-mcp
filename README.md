@@ -59,7 +59,7 @@ Detected by default:
 - **Financial and health identifiers** — `US_ROUTING_NUMBER`, `NPI`
 - **Credentials** — `API_KEY`, `BEARER_TOKEN`, `JWT`, `CREDENTIAL_URI`, `PRIVATE_KEY`
 
-`IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set.
+`IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set, or omit it for the defaults. Any other type is refused, and so is an empty list, which would select nothing.
 
 Credential detection covers common formats. It is not a substitute for a dedicated secret scanner, and a clean result is not proof a file holds no secrets.
 
