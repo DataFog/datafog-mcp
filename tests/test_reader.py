@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from datafog_mcp.paths import ALLOWED_ROOTS_VAR
 from datafog_mcp.reader import (
     FileExists,
     FileTooLarge,
@@ -84,14 +85,81 @@ def test_binary_file_is_rejected(tmp_path: Path) -> None:
         read_text_file(str(target), _LIMIT)
 
 
-def test_invalid_utf8_without_nul_is_decoded(tmp_path: Path) -> None:
-    """Latin-1 bytes decode with replacement instead of raising."""
+def test_invalid_utf8_is_refused(tmp_path: Path) -> None:
+    """
+    Text that is not UTF-8 is refused rather than silently altered.
+
+    Decoding with replacement turned an unsupported byte into U+FFFD, and the
+    write tools then saved that corruption into the copy. The error gives the
+    offset of the first bad byte but never the byte, which is file content.
+
+    Parameters:
+      tmp_path: Holds the input.
+    """
     target = tmp_path / "latin1.csv"
     target.write_bytes("name\nJos\xe9\n".encode("latin-1"))
 
-    result = read_text_file(str(target), _LIMIT)
+    with pytest.raises(NotText, match="not valid UTF-8") as excinfo:
+        read_text_file(str(target), _LIMIT)
 
-    assert "Jos" in result.text
+    assert "offset 8" in str(excinfo.value)
+    assert "Jos" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("encoding", ["utf-16", "utf-32"])
+def test_utf16_and_utf32_are_named(tmp_path: Path, encoding: str) -> None:
+    """
+    A UTF-16 or UTF-32 file is refused as such, not mistaken for binary.
+
+    Both encode ASCII with NUL bytes, so the binary check caught them first and
+    told the user their text file was not text.
+
+    Parameters:
+      tmp_path: Holds the input.
+      encoding: A BOM-writing encoding other than UTF-8.
+    """
+    target = tmp_path / "wide.csv"
+    target.write_bytes("name\nJack\n".encode(encoding))
+
+    with pytest.raises(NotText, match="UTF-16 or UTF-32"):
+        read_text_file(str(target), _LIMIT)
+
+
+def test_utf8_bom_is_accepted(tmp_path: Path) -> None:
+    """
+    A UTF-8 byte-order mark is valid UTF-8 and stays in the text.
+
+    Excel writes one at the start of CSV exports. Keeping it as a character,
+    rather than stripping it, means a copy is byte-for-byte faithful outside
+    the replaced spans.
+
+    Parameters:
+      tmp_path: Holds the input.
+    """
+    target = tmp_path / "excel.csv"
+    target.write_bytes(b"\xef\xbb\xbfname\nJack\n")
+
+    assert read_text_file(str(target), _LIMIT).text.startswith("\ufeffname")
+
+
+@pytest.mark.skipif(not Path("/proc/self/status").is_file(), reason="needs Linux /proc")
+def test_read_is_bounded_when_size_is_misreported(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    The size limit holds even when the reported size is wrong.
+
+    /proc files report a size of zero but have content, the same gap a file
+    growing between the size check and the read would open. The read itself
+    must enforce the limit, not trust the earlier check.
+
+    Parameters:
+      monkeypatch: Allows /proc as a root for this test.
+    """
+    monkeypatch.setenv(ALLOWED_ROOTS_VAR, "/proc")
+    status = Path("/proc/self/status")
+    assert status.stat().st_size == 0
+
+    with pytest.raises(FileTooLarge):
+        read_text_file(str(status), 100)
 
 
 def test_dangling_symlink_destination_is_refused(tmp_path: Path) -> None:

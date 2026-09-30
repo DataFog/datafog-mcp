@@ -225,3 +225,21 @@ def test_private_input_yields_private_copy(export: Path, tool: str) -> None:
     result = _call(tool, path=str(export))
 
     assert stat.S_IMODE(Path(result["output_path"]).stat().st_mode) == 0o600
+
+
+def test_utf8_bom_survives_into_the_copy(tmp_path: Path) -> None:
+    """
+    A copy keeps the input's byte-order mark.
+
+    Excel reads a BOM-less CSV as the wrong encoding, so dropping it would
+    corrupt accented names when the copy is opened.
+
+    Parameters:
+      tmp_path: Holds the input and the copy.
+    """
+    source = tmp_path / "excel.csv"
+    source.write_bytes(b"\xef\xbb\xbfname,email\nJack,jack.smith@example.com\n")
+
+    result = _call("datafog_redact", path=str(source))
+
+    assert Path(result["output_path"]).read_bytes().startswith(b"\xef\xbb\xbfname")
