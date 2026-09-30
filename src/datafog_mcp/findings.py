@@ -9,27 +9,9 @@ from typing import Any, Literal, Protocol
 
 from datafog_core import Finding
 
-Mode = Literal[
-    "findings",
-    "summary",
-    "content",
-    "block",
-]
-
-VALID_MODES: frozenset[str] = frozenset(
-    {
-        "findings",
-        "summary",
-        "content",
-        "block",
-    }
-)
-
-IMPLEMENTED_MODES: frozenset[str] = frozenset({"findings"})
-
-
-class UnsupportedMode(ValueError):
-    """The mode is recognized but not implemented yet."""
+# The only mode built. The schema is generated from this, so a mode listed
+# here is a promise to the agent; add one only alongside its implementation.
+Mode = Literal["findings"]
 
 
 class Labeled(Protocol):
@@ -83,24 +65,8 @@ def finding_to_dict(finding: Finding) -> dict[str, Any]:
     }
 
 
-def validate_mode(mode: str) -> None:
-    """
-    Reject modes that are unknown or not implemented yet.
-
-    Parameters:
-      mode: The requested return mode.
-    Returns:
-      None. Raises on invalid input.
-    """
-    if mode not in VALID_MODES:
-        raise ValueError("Not a valid mode.")
-
-    if mode not in IMPLEMENTED_MODES:
-        raise UnsupportedMode("Not yet an implemented mode.")
-
-
 def render(
-    mode: str,
+    mode: Mode,
     findings: Sequence[Any],
     path: str,
 ) -> dict[str, Any]:
@@ -114,8 +80,6 @@ def render(
     Returns:
       A dict representing what was found, shaped by the mode.
     """
-    validate_mode(mode)
-
     return {
         "path": path,
         "mode": mode,
