@@ -205,15 +205,143 @@ def test_env_overrides_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert paths.policy().roots == (from_env.resolve(),)
 
 
-def test_comments_and_blanks_are_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A file of examples leaves the policy at its default."""
+def test_file_with_no_roots_refuses_everything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A roots file that lists nothing refuses every path.
+
+    It used to fall through to the home directory, so commenting out every
+    root to lock the server down widened it instead.
+
+    Parameters:
+      tmp_path: Holds the roots file.
+      monkeypatch: Clears the variable and redirects the file.
+    """
     monkeypatch.delenv(ALLOWED_ROOTS_VAR, raising=False)
-    _write_roots_file(monkeypatch, tmp_path / "roots", "# ~/Downloads\n\n#~/Documents\n")
+    roots_file = tmp_path / "roots"
+    _write_roots_file(monkeypatch, roots_file, "# ~/Downloads\n\n#~/Documents\n")
 
     current = paths.policy()
 
-    assert current.roots == (Path.home().resolve(),)
-    assert current.source == "default (home directory)"
+    assert current.roots == ()
+    assert current.source == str(roots_file)
+
+
+@pytest.mark.parametrize("value", ["", "   ", os.pathsep, f" {os.pathsep} "])
+def test_empty_variable_refuses_everything(
+    value: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A variable that is set but names no directory refuses every path.
+
+    Set-but-empty is a deliberate lockdown, not an absence. A variable made
+    only of separators, as an unfilled template like "$A:$B" produces, counts
+    the same.
+
+    Parameters:
+      value: A setting that names no directory.
+      tmp_path: Holds a roots file the variable must override.
+      monkeypatch: Sets the variable and redirects the file.
+    """
+    _write_roots_file(monkeypatch, tmp_path / "roots", f"{tmp_path}\n")
+    monkeypatch.setenv(ALLOWED_ROOTS_VAR, value)
+
+    current = paths.policy()
+
+    assert current.roots == ()
+    assert current.source == f"${ALLOWED_ROOTS_VAR}"
+
+
+def test_refusal_says_no_roots_are_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Refusing under an empty policy names the cause, not an empty list.
+
+    Parameters:
+      tmp_path: Supplies a path to request.
+      monkeypatch: Sets an empty variable.
+    """
+    monkeypatch.setenv(ALLOWED_ROOTS_VAR, "")
+
+    with pytest.raises(PathNotAllowed, match="lists no allowed roots"):
+        resolve_input(str(tmp_path / "export.csv"))
+
+
+def test_relative_root_in_the_file_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A relative root is an error, not a path under the working directory.
+
+    The server's working directory is wherever the MCP client launched it, so
+    "Downloads" could mean any directory at all.
+
+    Parameters:
+      tmp_path: Holds the roots file.
+      monkeypatch: Clears the variable and redirects the file.
+    """
+    monkeypatch.delenv(ALLOWED_ROOTS_VAR, raising=False)
+    _write_roots_file(monkeypatch, tmp_path / "roots", "Downloads\n")
+
+    with pytest.raises(PathNotAllowed, match="'Downloads' is not an absolute path"):
+        paths.policy()
+
+
+def test_relative_root_in_the_variable_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    The variable is held to the same rule as the file.
+
+    Parameters:
+      monkeypatch: Sets the variable.
+    """
+    monkeypatch.setenv(ALLOWED_ROOTS_VAR, "Downloads")
+
+    with pytest.raises(PathNotAllowed, match="not an absolute path"):
+        paths.policy()
+
+
+def test_roots_path_that_is_not_a_file_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A directory where the roots file should be is an error, not an absence.
+
+    Parameters:
+      tmp_path: Holds the directory.
+      monkeypatch: Clears the variable and redirects the file.
+    """
+    monkeypatch.delenv(ALLOWED_ROOTS_VAR, raising=False)
+    roots_dir = tmp_path / "roots"
+    roots_dir.mkdir()
+    monkeypatch.setattr(paths, "ROOTS_FILE", roots_dir)
+
+    with pytest.raises(PathNotAllowed, match="not a regular file"):
+        paths.policy()
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or os.geteuid() == 0, reason="needs POSIX permissions and a non-root user"
+)
+def test_unreadable_roots_file_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    A roots file the server cannot read fails closed.
+
+    Parameters:
+      tmp_path: Holds the roots file.
+      monkeypatch: Clears the variable and redirects the file.
+    """
+    monkeypatch.delenv(ALLOWED_ROOTS_VAR, raising=False)
+    roots_file = tmp_path / "roots"
+    _write_roots_file(monkeypatch, roots_file, f"{tmp_path}\n")
+    roots_file.chmod(0o000)
+
+    try:
+        with pytest.raises(PathNotAllowed, match="cannot read"):
+            paths.policy()
+    finally:
+        roots_file.chmod(0o600)
 
 
 def test_tilde_in_the_file_is_expanded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

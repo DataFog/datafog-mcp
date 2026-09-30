@@ -13,13 +13,19 @@ ROOTS_FILE = Path.home() / ".config" / "datafog" / "allowed_roots"
 
 ROOTS_TEMPLATE = """\
 # Directories datafog may read from and write to.
-# One path per line. Blank lines and lines starting with # are ignored.
-# ~ is expanded.
+# One absolute path per line; ~ is expanded. Blank lines and lines
+# starting with # are ignored.
 #
-# Uncomment or add the directories you want datafog to reach.
-
+# This file starts out allowing your home directory, the same as having
+# no file at all. Replace ~ with narrower directories, for example:
+#
 # ~/Downloads
 # ~/Documents
+#
+# A file that lists no directories refuses every path. Delete the file
+# to return to the default.
+
+~
 """
 
 ALLOWED_ROOTS_VAR = "DATAFOG_MCP_ALLOWED_ROOTS"
@@ -34,6 +40,16 @@ class PathNotAllowed(Exception):
     """
 
 
+class PolicyError(PathNotAllowed):
+    """
+    The roots configuration exists but cannot be used.
+
+    A broken policy permits nothing, so this subclasses PathNotAllowed: every
+    request fails with the reason rather than the server guessing what was
+    meant.
+    """
+
+
 @dataclass(frozen=True)
 class RootPolicy:
     """
@@ -44,48 +60,71 @@ class RootPolicy:
     source: str
 
 
-def _parse(entries: Iterable[str]) -> tuple[Path, ...]:
+def _parse(entries: Iterable[str], source: str) -> tuple[Path, ...]:
     """
     Turn raw entries into resolved roots.
 
     Only whole-line comments are honored, so a path containing a hash is not
-    truncated.
+    truncated. A relative entry is refused rather than resolved: the working
+    directory is wherever the MCP client launched the server, so it could name
+    any directory at all.
 
     Parameters:
       entries: Candidate path strings.
+      source: Where the entries came from, for error messages.
     Returns:
       The resolved roots, skipping blanks and comments.
     """
-    return tuple(
-        Path(entry.strip()).expanduser().resolve()
-        for entry in entries
-        if entry.strip() and not entry.strip().startswith("#")
-    )
+    roots: list[Path] = []
+    for entry in (raw.strip() for raw in entries):
+        if not entry or entry.startswith("#"):
+            continue
+        expanded = Path(entry).expanduser()
+        if not expanded.is_absolute():
+            raise PolicyError(f"{source}: {entry!r} is not an absolute path")
+        roots.append(expanded.resolve())
+    return tuple(roots)
 
 
-def _roots_from_env() -> tuple[Path, ...]:
+def _roots_from_env() -> tuple[Path, ...] | None:
     """
     Read roots from the environment.
 
     Returns:
-        The configured roots, empty when the variable is unset.
+      The configured roots, or None when the variable is unset. Set but naming
+      no directory is a deliberate empty policy, not an absent one.
     """
-    raw = os.environ.get(ALLOWED_ROOTS_VAR, "")
-    return _parse(raw.split(os.pathsep)) if raw.strip() else ()
+    raw = os.environ.get(ALLOWED_ROOTS_VAR)
+    if raw is None:
+        return None
+    return _parse(raw.split(os.pathsep), f"${ALLOWED_ROOTS_VAR}")
 
 
-def _roots_from_file(path: Path) -> tuple[Path, ...]:
+def _roots_from_file(path: Path) -> tuple[Path, ...] | None:
     """
     Read roots from the config file.
+
+    Anything at the path counts as configuration, including a directory or a
+    dangling symlink, so a broken file fails closed instead of reading as
+    absent.
 
     Parameters:
       path: The roots file.
     Returns:
-      The configured roots, empty when the file is absent or only has comments.
+      The configured roots, or None when nothing exists at the path. A file
+      listing no roots is a deliberate empty policy.
     """
+    if not os.path.lexists(path):
+        return None
     if not path.is_file():
-        return ()
-    return _parse(path.read_text(encoding="utf-8").splitlines())
+        raise PolicyError(f"{path} is not a regular file")
+    try:
+        body = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise PolicyError(f"cannot read {path}: {exc.strerror}") from None
+    except UnicodeDecodeError:
+        raise PolicyError(f"{path} is not valid UTF-8") from None
+    return _parse(body.splitlines(), str(path))
 
 
 def policy() -> RootPolicy:
@@ -96,15 +135,19 @@ def policy() -> RootPolicy:
     user's home directory. The variable wins so a locked-down install cannot be
     widened by editing a file.
 
+    A source that is present takes effect even when it lists no roots, which
+    refuses every path. Falling through to the home directory instead would
+    mean clearing a policy widens it.
+
     Returns:
       The roots and a description of their source.
     """
     from_env = _roots_from_env()
-    if from_env:
+    if from_env is not None:
         return RootPolicy(from_env, f"${ALLOWED_ROOTS_VAR}")
 
     from_file = _roots_from_file(ROOTS_FILE)
-    if from_file:
+    if from_file is not None:
         return RootPolicy(from_file, str(ROOTS_FILE))
 
     return RootPolicy((Path.home().resolve(),), "default (home directory)")
@@ -135,21 +178,12 @@ def _is_denied(resolved: Path) -> bool:
     return any(part.casefold() in DENIED_DIR_NAMES for part in resolved.parts)
 
 
-def _within_allowed(resolved: Path) -> bool:
-    """
-    Report whether a path sits under a configured root.
-
-    Parameters:
-        resolved: An already-resolved absolute path.
-    Returns:
-        True if the path is inside one of the roots.
-    """
-    return any(resolved == root or root in resolved.parents for root in allowed_roots())
-
-
 def _check(resolved: Path) -> Path:
     """
     Apply the root policy to an already-resolved path.
+
+    The policy is resolved once, so the check and the refusal message cannot
+    disagree about which roots were in force.
 
     Parameters:
       resolved: An already-resolved absolute path.
@@ -158,8 +192,14 @@ def _check(resolved: Path) -> Path:
     """
     if _is_denied(resolved):
         raise PathNotAllowed(f"{resolved} is in a credential directory")
-    if not _within_allowed(resolved):
-        roots = ", ".join(str(root) for root in allowed_roots())
+
+    current = policy()
+    if not current.roots:
+        raise PathNotAllowed(
+            f"{resolved} is refused because {current.source} lists no allowed roots"
+        )
+    if not any(resolved == root or root in resolved.parents for root in current.roots):
+        roots = ", ".join(str(root) for root in current.roots)
         raise PathNotAllowed(f"{resolved} is outside the allowed roots: {roots}")
     return resolved
 

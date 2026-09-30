@@ -123,6 +123,71 @@ def test_roots_warns_that_the_variable_wins(
     assert "edits have no effect" in out
 
 
+def test_roots_reports_an_empty_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """
+    A policy with no roots says every path is refused, not an empty list.
+
+    Parameters:
+      tmp_path: Holds the roots file.
+      monkeypatch: Redirects the roots file.
+      capsys: Captures the command's output.
+    """
+    _use_roots_file(monkeypatch, tmp_path / "allowed_roots", "# ~/Downloads\n")
+
+    _run(monkeypatch, "roots")
+    out = capsys.readouterr().out
+
+    assert "every path is refused" in out
+    assert str(Path.home()) not in out
+
+
+def test_roots_reports_a_malformed_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """
+    A broken policy is one clear line and a failing exit, not a traceback.
+
+    Parameters:
+      tmp_path: Holds the roots file.
+      monkeypatch: Redirects the roots file.
+      capsys: Captures the command's output.
+    """
+    _use_roots_file(monkeypatch, tmp_path / "allowed_roots", "Downloads\n")
+
+    with pytest.raises(SystemExit) as excinfo:
+        _run(monkeypatch, "roots")
+
+    assert "not an absolute path" in str(excinfo.value.code)
+
+
+def test_edit_template_keeps_the_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Creating the roots file does not change what the server may reach.
+
+    An empty file now refuses everything, so a template of commented-out
+    examples would lock the server out the moment someone opened it to look.
+    The template starts from the default instead, and only a deliberate edit
+    narrows it.
+
+    Parameters:
+      tmp_path: Holds the roots file.
+      monkeypatch: Redirects the roots file and stubs the editor.
+    """
+    roots = tmp_path / "config" / "allowed_roots"
+    _use_roots_file(monkeypatch, roots)
+    _capture_editor(monkeypatch)
+
+    _run(monkeypatch, "roots", "--edit")
+
+    assert paths.policy().roots == (Path.home().resolve(),)
+
+
 def test_edit_creates_the_file_from_the_template(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
