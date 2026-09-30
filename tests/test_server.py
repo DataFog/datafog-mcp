@@ -11,6 +11,7 @@ import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
+from datafog_mcp.paths import ALLOWED_ROOTS_VAR
 from datafog_mcp.server import mcp
 
 DATA = Path(__file__).parent / "data" / "garmin_export.csv"
@@ -123,3 +124,24 @@ def test_unsupported_entity_type_reports_tool_error() -> None:
     """A bad entity_types value surfaces as a tool error, not a crash."""
     with pytest.raises(ToolError, match="unsupported entity types"):
         _call(path=str(DATA), entity_types=["PERSON"])
+
+
+@pytest.mark.parametrize(
+    ("setting", "reason"),
+    [("", "lists no allowed roots"), ("Downloads", "not an absolute path")],
+)
+def test_policy_problems_reach_the_agent(
+    setting: str, reason: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    An empty or malformed policy refuses with its reason, not a generic error.
+
+    Parameters:
+      setting: A value for the roots variable.
+      reason: What the refusal should say.
+      monkeypatch: Sets the roots variable.
+    """
+    monkeypatch.setenv(ALLOWED_ROOTS_VAR, setting)
+
+    with pytest.raises(ToolError, match=reason):
+        _call(path=str(DATA))
