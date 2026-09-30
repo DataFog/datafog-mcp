@@ -11,6 +11,10 @@ from pathlib import Path
 
 from .paths import resolve_input, resolve_output
 
+# Byte-order marks of encodings this server does not read. UTF-32 LE's mark
+# begins with UTF-16 LE's, so these three cover both widths and byte orders.
+_WIDE_BOMS = (b"\xff\xfe", b"\xfe\xff", b"\x00\x00\xfe\xff")
+
 
 class ReadError(Exception):
     """Base class for file-read failures."""
@@ -55,6 +59,13 @@ def read_text_file(path: str, max_bytes: int) -> FileContent:
     """
     Read a file as UTF-8 text. Refuse anything unscannable.
 
+    The stat() check fails fast with the exact size, but the read itself
+    enforces the limit: it takes at most one byte more than the cap, so a file
+    that grows after the check, or reports a size it does not have, still
+    cannot exceed it.
+
+    Text must be valid UTF-8.
+
     Parameters:
       path: Filesystem path to read.
       max_bytes: Size cap; larger files are refused.
@@ -72,17 +83,27 @@ def read_text_file(path: str, max_bytes: int) -> FileContent:
     if size > max_bytes:
         raise FileTooLarge(f"{resolved} is {size} bytes, over the {max_bytes} limit")
 
-    raw = resolved.read_bytes()
+    with resolved.open("rb") as handle:
+        raw = handle.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise FileTooLarge(f"{resolved} is over the {max_bytes} byte limit")
 
-    # Check for NUL bytes
+    # Checked before NUL bytes, which wide encodings use for ASCII text
+    if raw.startswith(_WIDE_BOMS):
+        raise NotText(f"{resolved} is UTF-16 or UTF-32 encoded; only UTF-8 is supported")
+
     if b"\x00" in raw:
         raise NotText(f"{resolved} seems to be binary, not text")
 
-    return FileContent(
-        text=raw.decode("utf-8", errors="replace"),
-        path=resolved,
-        size_bytes=size,
-    )
+    # from None: a UnicodeDecodeError holds the whole input as its .object
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise NotText(
+            f"{resolved} is not valid UTF-8 (first invalid byte at offset {exc.start})"
+        ) from None
+
+    return FileContent(text=text, path=resolved, size_bytes=len(raw))
 
 
 def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
