@@ -4,6 +4,8 @@ Safe file reading for scan and redaction requests.
 
 from __future__ import annotations
 
+import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -90,6 +92,13 @@ def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
     Creates exclusively. Refuses to overwrite and refuses any destination
     outside the directory of input it derives from.
 
+    The copy takes the input's permission bits, less execute and special bits,
+    and the umask can narrow them further. A copy may still hold identifiers
+    the detectors missed, so it is never made more readable than its source.
+
+    If the write fails after the file is created, the file is removed, so a
+    failure never leaves an empty or truncated copy that looks finished.
+
     Parameters:
       path: Destination path.
       text: Content to write.
@@ -98,11 +107,19 @@ def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
       The resolved path that was written.
     """
     resolved = resolve_output(str(path), beside)
+    mode = stat.S_IMODE(beside.stat().st_mode) & 0o666
 
     try:
-        with resolved.open("x", encoding="utf-8") as handle:
-            handle.write(text)
+        descriptor = os.open(resolved, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
     except FileExistsError as exc:
         raise FileExists(f"{resolved} already exists") from exc
+
+    # From here the file is ours, so removing it on failure is safe
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+    except BaseException:
+        resolved.unlink(missing_ok=True)
+        raise
 
     return resolved

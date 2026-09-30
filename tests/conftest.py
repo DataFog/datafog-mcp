@@ -5,6 +5,7 @@ Shared fixtures.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -33,3 +34,20 @@ def allow_test_paths(
     """
     roots = os.pathsep.join([str(tmp_path_factory.getbasetemp().resolve()), str(REPO_ROOT)])
     monkeypatch.setenv(ALLOWED_ROOTS_VAR, roots)
+
+
+@pytest.fixture
+def umask_022() -> Iterator[None]:
+    """
+    Run a test under the common default umask of 022.
+
+    The umask is process-wide, so the caller's value is restored afterward.
+
+    Returns:
+      Nothing. Yields once while the umask is in force.
+    """
+    previous = os.umask(0o022)
+    try:
+        yield
+    finally:
+        os.umask(previous)
