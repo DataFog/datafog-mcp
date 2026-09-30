@@ -114,15 +114,20 @@ def test_binary_file_reports_tool_error(tmp_path: Path) -> None:
         _call(path=str(archive))
 
 
-def test_unimplemented_mode_reports_tool_error() -> None:
-    """summary is declared but not built, and says so."""
+def test_undeclared_mode_is_refused() -> None:
+    """A mode the schema does not offer is refused before any work is done."""
     with pytest.raises(ToolError):
         _call(path=str(DATA), mode="summary")
 
 
 def test_unsupported_entity_type_reports_tool_error() -> None:
-    """A bad entity_types value surfaces as a tool error, not a crash."""
-    with pytest.raises(ToolError, match="unsupported entity types"):
+    """
+    A type the engine cannot report is refused at the schema.
+
+    PERSON needs structured input the server never passes, so a text scan
+    could only return nothing for it and report that as success.
+    """
+    with pytest.raises(ToolError, match="entity_types"):
         _call(path=str(DATA), entity_types=["PERSON"])
 
 
@@ -145,3 +150,14 @@ def test_policy_problems_reach_the_agent(
 
     with pytest.raises(ToolError, match=reason):
         _call(path=str(DATA))
+
+
+def test_empty_entity_types_is_refused() -> None:
+    """
+    An empty selection is an error, not a request for the defaults.
+
+    It used to select every default type, so a caller asking for "none of
+    these" got all of them. Omit the argument to get the defaults.
+    """
+    with pytest.raises(ToolError, match="at least 1 item"):
+        _call(path=str(DATA), entity_types=[])

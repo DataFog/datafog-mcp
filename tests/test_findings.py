@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from datafog_core import Finding, TextRange
 
 from datafog_mcp.findings import (
-    UnsupportedMode,
     counts_by_type,
     finding_to_dict,
     render,
@@ -85,21 +83,6 @@ def test_render_clean_file() -> None:
     assert result["entity_count"] == 0
     assert result["counts"] == {}
     assert result["findings"] == []
-
-
-def test_render_rejects_unknown_mode() -> None:
-    """An unrecognized mode is caller error, not a missing feature."""
-    with pytest.raises(ValueError) as excinfo:
-        render("bogus", [], "/tmp/x.csv")
-
-    assert not isinstance(excinfo.value, UnsupportedMode)
-
-
-@pytest.mark.parametrize("mode", ["summary", "content", "block"])
-def test_render_rejects_unimplemented_mode(mode: str) -> None:
-    """Declared but unbuilt modes raise UnsupportedMode."""
-    with pytest.raises(UnsupportedMode):
-        render(mode, [], "/tmp/x.csv")
 
 
 def test_render_transformation_reports_only_the_tally() -> None:

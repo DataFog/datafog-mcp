@@ -4,19 +4,19 @@ import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import fastmcp
 from datafog_core import scan, transform
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from pydantic import Field
 
-from datafog_mcp.config import ScanConfig, Strategy, transform_config
+from datafog_mcp.config import SUPPORTED_ENTITIES, ScanConfig, Strategy, transform_config
 from datafog_mcp.findings import (
     Mode,
     render,
     render_transformation,
-    validate_mode,
 )
 from datafog_mcp.paths import PathNotAllowed
 from datafog_mcp.reader import (
@@ -25,6 +25,17 @@ from datafog_mcp.reader import (
     read_text_file,
     write_text_file,
 )
+
+if TYPE_CHECKING:
+    EntityType = str
+else:
+    # Built from the engine's own list, so the schema cannot drift from what a
+    # scan can report. Type checkers see str; FastMCP publishes the enum.
+    EntityType = Literal[tuple(sorted(SUPPORTED_ENTITIES))]
+
+# Omit for the default set. An empty list asks for nothing, so the schema
+# declares it invalid rather than reading it as the default.
+EntitySelection = Annotated[list[EntityType], Field(min_length=1)] | None
 
 mcp = FastMCP(
     name="datafog",
@@ -85,7 +96,7 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
       A validated ScanConfig.
     """
     try:
-        if entity_types:
+        if entity_types is not None:
             return ScanConfig(entities=tuple(entity_types))
         return ScanConfig()
     except ValueError as exc:
@@ -96,7 +107,7 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
 async def datafog_scan(
     path: str,
     mode: Mode = "findings",
-    entity_types: list[str] | None = None,
+    entity_types: EntitySelection = None,
 ) -> dict[str, Any]:
     """
     Detect personal and sensitive data in a file, without reading it into
@@ -130,11 +141,12 @@ async def datafog_scan(
 
     Parameters:
       path: The path of the file to scan.
-      mode: What to return.
+      mode: What to return. Only "findings" is available: the type and
+      offsets of each detected entity.
       entity_types: The types to look for. Defaults to API_KEY, BEARER_TOKEN,
       CREDENTIAL_URI, CREDIT_CARD, DATE, EMAIL, JWT, NPI, PHONE, PRIVATE_KEY,
       SSN, US_ROUTING_NUMBER, and ZIP_CODE. IP_ADDRESS is available on
-      request.
+      request. Omit for the defaults; an empty list is refused.
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
       detected entities.
@@ -158,12 +170,7 @@ async def _scan_file(
     Returns:
       The tool response describing what was found.
     """
-    # Deliberate validation order: mode, then config, then file read
-    try:
-        validate_mode(mode)
-    except ValueError as exc:
-        raise ToolError(str(exc)) from exc
-
+    # Config before the read, so bad input never touches the filesystem
     config = _config_from(entity_types)
 
     try:
@@ -235,7 +242,7 @@ async def _transform_to_file(
 async def datafog_redact(
     path: str,
     output_path: str | None = None,
-    entity_types: list[str] | None = None,
+    entity_types: EntitySelection = None,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data replaced by labels.
@@ -256,7 +263,7 @@ async def datafog_redact(
       output_path: Where to write. Defaults to a sibling of the input with a
       _redacted suffix.
       entity_types: The types to replace. Defaults to the same types as
-      datafog_scan.
+      datafog_scan; an empty list is refused.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -273,7 +280,7 @@ async def datafog_redact(
 async def datafog_mask(
     path: str,
     output_path: str | None = None,
-    entity_types: list[str] | None = None,
+    entity_types: EntitySelection = None,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data covered over.
@@ -293,7 +300,7 @@ async def datafog_mask(
       output_path: Where to write. Defaults to a sibling of the input with
       a _masked suffix.
       entity_types: The types to replace. Defaults to the same types as
-      datafog_scan.
+      datafog_scan; an empty list is refused.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -310,7 +317,7 @@ async def datafog_mask(
 async def datafog_remove(
     path: str,
     output_path: str | None = None,
-    entity_types: list[str] | None = None,
+    entity_types: EntitySelection = None,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data deleted outright.
@@ -331,7 +338,7 @@ async def datafog_remove(
       output_path: Where to write. Defaults to a sibling of the input with
       a _removed suffix.
       entity_types: The types to delete. Defaults to the same types as
-      datafog_scan.
+      datafog_scan; an empty list is refused.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """

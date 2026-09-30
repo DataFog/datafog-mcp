@@ -609,6 +609,7 @@ dependencies = [
     { name = "datafog-core" },
     { name = "fastmcp" },
     { name = "mcp" },
+    { name = "pydantic" },
 ]
 
 [package.optional-dependencies]
@@ -649,6 +650,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.8.0" },
+    { name = "pydantic", specifier = ">=2,<3" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.398" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },

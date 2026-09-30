@@ -21,6 +21,7 @@ dependencies = [
     "mcp>=1.2.0",
     "fastmcp>=3,<4",
     "datafog-core>=0.4.1,<0.5",
+    "pydantic>=2,<3",
 ]
 
 [project.optional-dependencies]
