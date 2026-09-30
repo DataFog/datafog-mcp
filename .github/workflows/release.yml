@@ -1,0 +1,155 @@
+name: Release
+
+# Builds, verifies, and publishes datafog-mcp. RELEASING.md is the runbook.
+#
+#   push tag vX.Y.Z   build, verify, then publish to PyPI
+#   run by hand       build, verify, then publish to TestPyPI, to rehearse
+#   pull request      build and verify only, so packaging is tested before
+#                     release day rather than on it
+#
+# Publishing uses PyPI Trusted Publishing, so no API token exists anywhere.
+# Each publish job runs in a GitHub environment the maintainer must approve,
+# and PyPI records a provenance attestation tying every file to the workflow
+# run that built it.
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - src/**
+      - pyproject.toml
+      - uv.lock
+      - CHANGELOG.md
+      - scripts/check-release.py
+      - scripts/smoke_installed.py
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the tag, version, and changelog agree
+        id: release
+        run: uv run --no-project --python 3.12 scripts/check-release.py
+
+      # uv builds the sdist first and then the wheel from the sdist, so a
+      # file missing from the sdist fails here rather than for a user.
+      - name: Build the sdist and wheel
+        run: uv build
+
+      - name: Record checksums
+        run: |
+          {
+            echo '### Artifacts'
+            echo '```'
+            (cd dist && sha256sum -- *)
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+
+  verify:
+    name: Verify (Python ${{ matrix.python-version }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # Installed from the wheel alone, with dependencies resolved fresh, as
+      # a user would get them. Nothing from the checkout is importable.
+      - name: Install the wheel into a clean environment
+        run: |
+          uv venv "$RUNNER_TEMP/venv" --python ${{ matrix.python-version }}
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" dist/*.whl
+
+      # The version comes from the build job, which checked it, and reaches
+      # the script through the environment rather than ${{ }} expansion,
+      # since a pull request controls pyproject.toml.
+      - name: Smoke test the installed server over stdio
+        working-directory: ${{ runner.temp }}
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: '"$RUNNER_TEMP/venv/bin/python" "$GITHUB_WORKSPACE/scripts/smoke_installed.py" "$VERSION"'
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    if: github.event_name == 'workflow_dispatch'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/datafog-mcp
+    permissions:
+      id-token: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          attestations: true
+
+  publish-pypi:
+    name: Publish to PyPI
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/datafog-mcp
+    permissions:
+      id-token: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
