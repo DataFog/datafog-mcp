@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,8 @@ from datafog_mcp.reader import (
 )
 
 _LIMIT = 1024
+
+posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
 
 
 def test_reads_utf8_text(tmp_path: Path) -> None:
@@ -125,3 +129,88 @@ def test_symlink_to_existing_file_is_not_written_through(
         write_text_file(link, "payload", beside=source)
 
     assert target.read_text(encoding="utf-8") == "original"
+
+
+def _mode(path: Path) -> int:
+    """
+    Read a file's permission bits.
+
+    Parameters:
+      path: The file to inspect.
+    Returns:
+      The permission bits, without the file type.
+    """
+    return stat.S_IMODE(path.stat().st_mode)
+
+
+@posix_only
+@pytest.mark.parametrize(
+    ("source_mode", "expected"),
+    [(0o600, 0o600), (0o640, 0o640), (0o644, 0o644), (0o755, 0o644)],
+    ids=["0600", "0640", "0644", "0755"],
+)
+@pytest.mark.usefixtures("umask_022")
+def test_output_takes_the_input_permissions(
+    tmp_path: Path, source_mode: int, expected: int
+) -> None:
+    """
+    A copy is never more readable than its source.
+
+    The copy may still hold identifiers the detectors missed, so it is no
+    safer to widen than the original. Execute bits are dropped, since a
+    transformed text file is never meant to run.
+
+    Parameters:
+      tmp_path: Holds the source and the copy.
+      source_mode: Permission bits given to the source.
+      expected: Permission bits the copy should end up with.
+    """
+    source = tmp_path / "in.csv"
+    source.write_text("x", encoding="utf-8")
+    source.chmod(source_mode)
+
+    written = write_text_file(tmp_path / "out.csv", "y", beside=source)
+
+    assert _mode(written) == expected
+
+
+@posix_only
+def test_umask_can_still_narrow_the_copy(tmp_path: Path) -> None:
+    """
+    A stricter umask makes the copy stricter than its source, never looser.
+
+    Parameters:
+      tmp_path: Holds the source and the copy.
+    """
+    source = tmp_path / "in.csv"
+    source.write_text("x", encoding="utf-8")
+    source.chmod(0o644)
+
+    previous = os.umask(0o077)
+    try:
+        written = write_text_file(tmp_path / "out.csv", "y", beside=source)
+    finally:
+        os.umask(previous)
+
+    assert _mode(written) == 0o600
+
+
+def test_failed_write_leaves_no_file(tmp_path: Path) -> None:
+    """
+    A write that fails after the file is created leaves nothing behind.
+
+    Otherwise an empty or truncated copy would sit at the output path looking
+    like a finished result. A lone surrogate cannot be encoded as UTF-8, so the
+    write fails after the destination already exists.
+
+    Parameters:
+      tmp_path: Holds the source and the attempted copy.
+    """
+    source = tmp_path / "in.csv"
+    source.write_text("x", encoding="utf-8")
+    destination = tmp_path / "out.csv"
+
+    with pytest.raises(UnicodeEncodeError):
+        write_text_file(destination, "partial\ud800", beside=source)
+
+    assert not destination.exists()

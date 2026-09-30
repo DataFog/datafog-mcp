@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -202,3 +204,24 @@ def test_tools_cannot_widen_their_own_roots(
 
     assert not roots_file.exists()
     assert paths.allowed_roots() == (tmp_path.resolve(),)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
+@pytest.mark.parametrize("tool", ["datafog_redact", "datafog_mask", "datafog_remove"])
+@pytest.mark.usefixtures("umask_022")
+def test_private_input_yields_private_copy(export: Path, tool: str) -> None:
+    """
+    A file only its owner can read produces a copy only its owner can read.
+
+    Under the common umask of 022, a copy created with default permissions
+    would be readable by every user on the machine.
+
+    Parameters:
+      export: The input file.
+      tool: The transformation under test.
+    """
+    export.chmod(0o600)
+
+    result = _call(tool, path=str(export))
+
+    assert stat.S_IMODE(Path(result["output_path"]).stat().st_mode) == 0o600

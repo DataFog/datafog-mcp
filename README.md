@@ -51,6 +51,8 @@ Every tool takes a path and returns a path. None returns file contents or matche
 
 The write tools create a sibling of the input and never modify the original. An existing file at the destination is never overwritten. `output_path` can name the file but not move it to another directory.
 
+A copy gets the input's permissions, minus any execute bits, so a file only you can read produces a copy only you can read. A copy can still hold values the detectors missed, so it is never made more readable than its source. If a write fails partway, the incomplete copy is deleted.
+
 Detected by default:
 
 - **Personal data** — `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `DATE`, `ZIP_CODE`
