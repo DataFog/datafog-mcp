@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+import fastmcp
 from datafog_core import scan, transform
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
@@ -34,7 +35,8 @@ mcp = FastMCP(
         "files on disk for emails, phone numbers, SSNs, credit card "
         "numbers, dates, ZIP codes, bank routing numbers, NPIs, API "
         "keys, tokens, and private keys, and can write a transformed "
-        "copy. Runs locally. No data is sent anywhere."
+        "copy. File contents are processed on this machine and never "
+        "included in tool responses."
     ),
 )
 
@@ -337,5 +339,12 @@ async def datafog_remove(
 
 
 def run_server() -> None:
-    """Run the MCP server over stdio."""
-    mcp.run(transport="stdio")
+    """
+    Run the MCP server over stdio, without touching the network.
+
+    FastMCP's startup banner checks PyPI for a newer release, which is the
+    server's only outbound request. The banner is suppressed, and the check is
+    switched off as well so nothing else in FastMCP can trigger it.
+    """
+    fastmcp.settings.check_for_updates = "off"
+    mcp.run(transport="stdio", show_banner=False)
