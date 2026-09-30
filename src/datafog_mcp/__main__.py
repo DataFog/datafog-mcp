@@ -15,6 +15,7 @@ from .paths import (
     DENIED_DIR_NAMES,
     ROOTS_FILE,
     ROOTS_TEMPLATE,
+    PolicyError,
     policy,
 )
 
@@ -44,17 +45,22 @@ def _show_roots() -> None:
     """
     Print the roots in force, their source, and what is always refused.
     """
-    current = policy()
+    try:
+        current = policy()
+    except PolicyError as exc:
+        raise SystemExit(f"datafog-mcp: {exc}") from None
 
     print(f"Allowed roots (from {current.source}):")
     for root in current.roots:
         print(f"  {root}")
+    if not current.roots:
+        print("  none - every path is refused")
     print()
 
     print(f"Config file: {ROOTS_FILE}")
     if not ROOTS_FILE.is_file():
         print("  not created yet - run: datafog-mcp roots --edit")
-    if os.environ.get(ALLOWED_ROOTS_VAR, "").strip():
+    if os.environ.get(ALLOWED_ROOTS_VAR) is not None:
         print(f"  overridden by ${ALLOWED_ROOTS_VAR}; edits have no effect")
     print()
 
