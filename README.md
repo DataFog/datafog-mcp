@@ -61,7 +61,15 @@ Detected by default:
 
 `IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set, or omit it for the defaults. Any other type is refused, and so is an empty list, which would select nothing.
 
-Credential detection covers common formats. It is not a substitute for a dedicated secret scanner, and a clean result is not proof a file holds no secrets.
+Some types are narrower than their names suggest:
+
+- **`US_ROUTING_NUMBER` and `NPI`** are found only after a label, such as `Routing number: 021000021` or `NPI: 1234567893`. A bare value, such as one in a CSV column named `npi`, is missed or reported as another type, often `PHONE` or `SSN`.
+- **`API_KEY`** covers GitHub tokens and Stripe secret and restricted keys. Keys from other providers, such as AWS, are not detected.
+- **`BEARER_TOKEN`** is the token in an `Authorization: Bearer` header.
+- **`CREDENTIAL_URI`** covers PostgreSQL connection strings that include a password (`postgres://` or `postgresql://`). Other schemes, such as MySQL, Redis, or MongoDB, are not detected.
+- **`PRIVATE_KEY`** is a complete PEM private-key block. Public keys and certificates are not reported.
+
+Credential detection is not a substitute for a dedicated secret scanner, and a clean result is not proof a file holds no secrets.
 
 ## Supported files
 
