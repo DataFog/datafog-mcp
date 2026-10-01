@@ -45,10 +45,11 @@ mcp = FastMCP(
     instructions=(
         "Local PII and credential detection and transformation. Scans "
         "files on disk for emails, phone numbers, SSNs, credit card "
-        "numbers, dates, ZIP codes, bank routing numbers, NPIs, API "
-        "keys, tokens, and private keys, and can write a transformed "
-        "copy. File contents are processed on this machine and never "
-        "included in tool responses."
+        "numbers, dates, ZIP codes, labeled bank routing numbers and "
+        "NPIs, GitHub and Stripe API keys, bearer tokens, JWTs, "
+        "PostgreSQL connection strings, and private keys, and can write "
+        "a transformed copy. File contents are processed on this machine "
+        "and never included in tool responses."
     ),
 )
 
@@ -135,10 +136,16 @@ async def datafog_scan(
     are binary and are not parsed. A refusal is not a clean result: the file
     was not checked.
 
-    It also detects common credentials - API keys, bearer tokens, JWTs,
-    credentials embedded in URIs, and PEM private keys - but is not a
-    substitute for a dedicated secret scanner. A clean result means none of
-    these detectors matched, not that the file holds no secrets.
+    It also detects some credentials: GitHub tokens and Stripe secret keys,
+    tokens in Authorization: Bearer headers, JWTs, PostgreSQL connection
+    strings with a password, and PEM private keys. Other providers' keys, such
+    as AWS, and other URI schemes, such as MySQL or Redis, are not detected.
+    It is not a substitute for a dedicated secret scanner. A clean result
+    means none of these detectors matched, not that the file holds no secrets.
+
+    Routing numbers and NPIs are found only after a label such as "Routing
+    number:" or "NPI:". A bare value, such as one in a CSV column, is missed
+    or reported as another type.
 
     Parameters:
       path: The path of the file to scan.
