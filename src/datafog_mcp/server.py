@@ -182,9 +182,15 @@ async def _scan_file(
     found = await asyncio.to_thread(scan, content.text)
     kept = [item for item in found if config.keeps(item.entity_type)]
 
+    # The engine reports every detector's match, so one value can appear
+    # twice: an NPI is also a valid phone number. Transforming resolves those
+    # overlaps, so the scan reports exactly the spans the write tools replace.
+    # The transformed text is discarded.
+    resolved = await asyncio.to_thread(transform, content.text, kept, transform_config("redact"))
+
     return render(
         mode=mode,
-        findings=kept,
+        findings=resolved.transformations,
         path=str(content.path),
     )
 
