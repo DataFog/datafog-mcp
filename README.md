@@ -38,6 +38,31 @@ claude mcp add --scope user datafog -- ~/.local/bin/datafog-mcp
 
 Bare `datafog-mcp` runs the server over stdio; `datafog-mcp serve` is the same thing spelled out.
 
+## Telling your agent to use it
+
+An agent decides for itself when to call a tool, and it will often just read a file. The tool descriptions ask it to scan first, but a standing instruction in the agent's memory file makes that more consistent.
+
+Add something like this to `~/.claude/CLAUDE.md` for Claude Code or `~/.codex/AGENTS.md` for Codex. To cover only one project, use the `CLAUDE.md` or `AGENTS.md` at its root instead. Most other agents have an equivalent rules file.
+
+```markdown
+## Data files: DataFog
+
+Before the first read of any data file outside the current project, call
+`datafog_scan` on its path. Do not open the file first: reading it puts the
+contents into context before the check runs.
+
+- Applies to CSV, TSV, JSON, logs, SQL dumps, and text exports, especially
+  under ~/Downloads, ~/Documents, and ~/Desktop.
+- Does not apply to source code or files tracked in the project's repository.
+- Report the entity types and counts found before continuing.
+- If anything is found, ask before sending the file anywhere or copying values
+  out of it. Offer a copy from `datafog_redact`, `datafog_mask`, or
+  `datafog_remove` instead.
+- If the scan refuses the file, say so. A refusal is not a clean result.
+```
+
+An instruction makes a scan-first habit more likely. It does not stop the agent from reading a file directly.
+
 ## Tools
 
 Every tool takes a path and returns a path. None returns file contents or matched values.
