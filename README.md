@@ -97,6 +97,38 @@ Always refused, even inside a root: `.ssh`, `.gnupg`, `.aws`, `.kube`, `gcloud`.
 
 A refused path returns a tool error naming the roots in force, or why the policy can't be used.
 
+## Uninstall
+
+Remove the registration first. If the program goes first, Claude Code fails to start `datafog` in every session (`ENOENT`) until the registration is removed too.
+
+```bash
+claude mcp remove datafog --scope user
+uv tool uninstall datafog-mcp
+```
+
+Then remove the configuration, if you created it with `datafog-mcp roots --edit`:
+
+```bash
+rm ~/.config/datafog/allowed_roots
+rmdir ~/.config/datafog
+```
+
+If you set `DATAFOG_MCP_ALLOWED_ROOTS` in your shell profile, remove it there.
+
+That removes everything the server itself created. It keeps no cache, log, or data directory of its own.
+
+Two things remain, on purpose:
+
+- **Copies the tools wrote.** These are your files, saved beside their originals with `_redacted`, `_masked`, or `_removed` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
+
+  ```bash
+  find ~ \( -name '*_redacted.*' -o -name '*_masked.*' -o -name '*_removed.*' \) -type f
+  ```
+
+- **Claude Code's logs about the server.** Claude Code records its connections to each MCP server and keeps those records after the server is gone. They're under `~/.cache/claude-cli-nodejs/*/mcp-logs-datafog/` on Linux and `~/Library/Caches/claude-cli-nodejs/*/mcp-logs-datafog/` on macOS, and you can delete them.
+
+For another MCP client, remove the `datafog` entry from that client's MCP configuration in place of the `claude mcp remove` step.
+
 ## Development
 
 ```bash
