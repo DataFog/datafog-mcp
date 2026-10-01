@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, Literal, Protocol
 
-from datafog_core import Finding
+from datafog_core import TextRange
 
 # The only mode built. The schema is generated from this, so a mode listed
 # here is a promise to the agent; add one only alongside its implementation.
@@ -45,29 +45,46 @@ def counts_by_type(items: Sequence[Labeled]) -> dict[str, int]:
     return counts
 
 
-def finding_to_dict(finding: Finding) -> dict[str, Any]:
+class Located(Labeled, Protocol):
+    """
+    A labeled span of the source text, such as a transformation.
+    """
+
+    @property
+    def source_codepoint_range(self) -> TextRange:
+        """
+        Where the value sat in the text that was scanned.
+
+        Returns:
+          The span in codepoints.
+        """
+        ...
+
+
+def finding_to_dict(finding: Located) -> dict[str, Any]:
     """
     Convert a detection into a serializable record.
 
-    Deliberately omits matched_text. The tool reports where something is and
-    what kind it is; returning the value would put into context exactly what
+    Takes a transformation, which carries no matched text, so the record
+    cannot include the value. The tool reports where something is and what
+    kind it is; returning the value would put into context exactly what
     path-based scanning exists to keep out.
 
     Parameters:
-      finding: A single detection from datafog_core.scan.
+      finding: A detection, as resolved by datafog_core.transform.
     Returns:
       A dict with the entity type and the span it occupies.
     """
     return {
         "type": finding.entity_type,
-        "start": finding.codepoint_range.start,
-        "end": finding.codepoint_range.end,
+        "start": finding.source_codepoint_range.start,
+        "end": finding.source_codepoint_range.end,
     }
 
 
 def render(
     mode: Mode,
-    findings: Sequence[Any],
+    findings: Sequence[Located],
     path: str,
 ) -> dict[str, Any]:
     """
@@ -75,7 +92,7 @@ def render(
 
     Parameters:
       mode: The requested return mode.
-      findings: Detections from the scan.
+      findings: Detections, with overlapping matches already resolved.
       path: The file that was scanned.
     Returns:
       A dict representing what was found, shaped by the mode.

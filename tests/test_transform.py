@@ -243,3 +243,30 @@ def test_utf8_bom_survives_into_the_copy(tmp_path: Path) -> None:
     result = _call("datafog_redact", path=str(source))
 
     assert Path(result["output_path"]).read_bytes().startswith(b"\xef\xbb\xbfname")
+
+
+@pytest.mark.parametrize("tool", ["datafog_redact", "datafog_mask", "datafog_remove"])
+def test_scan_counts_what_the_write_tools_replace(tmp_path: Path, tool: str) -> None:
+    """
+    A scan reports exactly the spans a write tool would replace.
+
+    The fixture's own entities plus two overlapping values, an NPI that is also
+    a phone number and a credential URI containing an email address.
+
+    Parameters:
+      tmp_path: Directory for the input and copy.
+      tool: The write tool compared against the scan.
+    """
+    source = tmp_path / "mixed.txt"
+    source.write_text(
+        SOURCE.read_text(encoding="utf-8")
+        + "Provider NPI: 1234567893\n"
+        + "DATABASE_URL=postgres://admin:hunter2@db.example.com:5432/prod\n",
+        encoding="utf-8",
+    )
+
+    scanned = _call("datafog_scan", path=str(source))
+    written = _call(tool, path=str(source))
+
+    assert scanned["counts"] == written["counts"]
+    assert scanned["entity_count"] == written["entity_count"]

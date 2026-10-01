@@ -161,3 +161,58 @@ def test_empty_entity_types_is_refused() -> None:
     """
     with pytest.raises(ToolError, match="at least 1 item"):
         _call(path=str(DATA), entity_types=[])
+
+
+def _scan_text(tmp_path: Path, text: str, **arguments: Any) -> dict[str, Any]:
+    """
+    Scan a file holding the given text.
+
+    Parameters:
+      tmp_path: Directory for the file.
+      text: File contents.
+      arguments: Extra tool arguments.
+    Returns:
+      The scan result.
+    """
+    source = tmp_path / "input.txt"
+    source.write_text(text, encoding="utf-8")
+    return _call(path=str(source), **arguments)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Provider NPI: 1234567893\n", {"NPI": 1}),
+        ("DATABASE_URL=postgres://admin:hunter2@db.example.com:5432/prod\n", {"CREDENTIAL_URI": 1}),
+    ],
+    ids=["npi-is-not-also-a-phone", "credential-uri-is-not-also-an-email"],
+)
+def test_overlapping_findings_are_counted_once(
+    tmp_path: Path, text: str, expected: dict[str, int]
+) -> None:
+    """
+    One value matched by two detectors is reported once, as the write tools treat it.
+
+    Parameters:
+      tmp_path: Directory for the input.
+      text: A value two detectors both match.
+      expected: The single finding that should be reported.
+    """
+    result = _scan_text(tmp_path, text)
+
+    assert result["counts"] == expected
+    assert result["entity_count"] == 1
+
+
+def test_narrowing_keeps_the_requested_type(tmp_path: Path) -> None:
+    """
+    Asking only for PHONE still finds a number that an NPI would otherwise win.
+
+    Overlaps are resolved among the requested types, not before narrowing.
+
+    Parameters:
+      tmp_path: Directory for the input.
+    """
+    result = _scan_text(tmp_path, "Provider NPI: 1234567893\n", entity_types=["PHONE"])
+
+    assert result["counts"] == {"PHONE": 1}
