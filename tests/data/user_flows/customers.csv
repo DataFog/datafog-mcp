@@ -1,0 +1,6 @@
+customer_id,full_name,email,phone,street_address,city,zip,signup_date,ssn,card_number,iban,uk_ni_number
+1001,Jane Doe,jane.doe@example.com,(415) 555-0132,1600 Fake Street,San Francisco,94103,2024-03-14,219-09-9999,4111 1111 1111 1111,DE89370400440532013000,QQ123456C
+1002,Rahul Mehta,rahul.mehta@example.com,+1 212 555 0187,42 Sample Avenue,New York,10001,2024-05-02,,5555 5555 5555 4444,GB82WEST12345698765432,AB123456D
+1003,Jane Doe,jane.doe@example.com,(415) 555-0132,1600 Fake Street,San Francisco,94103,2024-07-21,219-09-9999,4111 1111 1111 1111,DE89370400440532013000,QQ123456C
+1004,Ana Souza,ana.souza@example.org,+44 20 7946 0958,10 Example Road,London,,2024-08-30,,,GB29NWBK60161331926819,CE123456A
+1005,Wei Chen,wei.chen@example.net,+49 30 901820,Musterstrasse 5,Berlin,10115,2024-09-09,,,DE44500105175407324931,

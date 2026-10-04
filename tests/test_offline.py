@@ -12,12 +12,17 @@ that happens at startup, such as FastMCP's banner checking PyPI for updates.
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
+import json
 import os
 import sys
 from pathlib import Path
 
+import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
+from fastmcp.exceptions import ToolError
 
 # Loaded by the child interpreter at startup. Records egress attempts to the
 # file named by DATAFOG_EGRESS_LOG and refuses them. Loopback is allowed,
@@ -94,8 +99,33 @@ def test_serving_makes_no_network_requests(tmp_path: Path) -> None:
 
     async def session() -> None:
         async with Client(transport) as client:
-            await client.call_tool("datafog_scan", {"path": str(source)})
-            await client.call_tool("datafog_redact", {"path": str(source)})
+            policy_result = await client.call_tool("datafog_get_policy", {})
+            assert policy_result.structured_content is not None
+            assert policy_result.structured_content["on_findings"] == "ask"
+            scanned = await client.call_tool("datafog_scan", {"path": str(source)})
+            assert scanned.structured_content is not None
+            assert scanned.structured_content["counts"] == {"EMAIL": 1}
+            assert scanned.structured_content["findings"][0]["field_name"] == "email"
+            assert "jack.smith@example.com" not in json.dumps(scanned.structured_content)
+            original = source.read_bytes()
+            for name in ("redact", "mask", "remove"):
+                response = await client.call_tool("datafog_" + name, {"path": str(source)})
+                assert response.structured_content is not None
+                assert response.structured_content["counts"] == {"EMAIL": 1}
+                output = Path(response.structured_content["output_path"])
+                before = output.read_bytes()
+                rows = list(csv.reader(io.StringIO(before.decode())))
+                assert rows[0] == ["name", "email"]
+                assert len(rows) == 2 and rows[1][0] == "Jack"
+                assert "jack.smith@example.com" not in before.decode()
+                with pytest.raises(ToolError, match="already exists"):
+                    await client.call_tool("datafog_" + name, {"path": str(source)})
+                assert output.read_bytes() == before
+                assert source.read_bytes() == original
+            checked = await client.call_tool("datafog_check_text", {"text": "a@example.com"})
+            assert checked.structured_content is not None
+            assert checked.structured_content["counts"] == {"EMAIL": 1}
+            assert "a@example.com" not in json.dumps(checked.structured_content)
 
     asyncio.run(session())
 

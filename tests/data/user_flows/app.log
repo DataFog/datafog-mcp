@@ -1,0 +1,6 @@
+2026-09-30 08:14:02 INFO  order=48213 status=created region=94103
+2026-09-30 08:14:05 INFO  order=48214 status=created region=10001
+2026-09-30 08:15:11 WARN  retry=3 latency_ms=12045 client_ip=203.0.113.42
+2026-09-30 08:16:40 ERROR auth failed for user_id=77812 from 198.51.100.7
+2026-09-30 08:17:02 DEBUG outbound call Authorization: Bearer sk_test_FAKE0000000000000000000000
+2026-09-30 08:18:30 INFO  build=20260930 artifact_size=33021 checksum=55120

@@ -243,8 +243,8 @@ def resolve_output(path: str, beside: Path) -> Path:
     """
     Resolve a path the server may write.
 
-    Outputs are confined to the directory of the input they derive from. The
-    configuration directory is refused outright too.
+    Outputs may use an existing directory inside allowed roots. The
+    configuration directory and its descendants are refused outright.
 
     Parameters:
         path: The requested path.
@@ -256,9 +256,12 @@ def resolve_output(path: str, beside: Path) -> Path:
     destination = raw_path.parent.resolve() / raw_path.name
     resolved = _check(destination)
 
-    if _same_directory(resolved.parent, ROOTS_FILE.parent):
+    if (
+        _same_directory(resolved.parent, ROOTS_FILE.parent)
+        or ROOTS_FILE.parent.resolve() in resolved.parents
+    ):
         raise PathNotAllowed(f"{resolved} is inside the server's configuration directory")
-    if not _same_directory(resolved.parent, beside.parent):
-        raise PathNotAllowed(f"{resolved} must be in the same directory as {beside}")
+    if not resolved.parent.is_dir():
+        raise PathNotAllowed("output directory must already exist")
 
     return resolved

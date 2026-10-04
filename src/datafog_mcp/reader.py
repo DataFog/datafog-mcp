@@ -92,7 +92,7 @@ def read_text_file(path: str, max_bytes: int) -> FileContent:
     if raw.startswith(_WIDE_BOMS):
         raise NotText(f"{resolved} is UTF-16 or UTF-32 encoded; only UTF-8 is supported")
 
-    if b"\x00" in raw:
+    if raw.startswith((b"PK\x03\x04", b"%PDF-", b"\x89PNG", b"\xff\xd8\xff")) or b"\x00" in raw:
         raise NotText(f"{resolved} seems to be binary, not text")
 
     # from None: a UnicodeDecodeError holds the whole input as its .object
@@ -110,8 +110,7 @@ def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
     """
     Write text to a file the server is allowed to create.
 
-    Creates exclusively. Refuses to overwrite and refuses any destination
-    outside the directory of input it derives from.
+    Creates exclusively. Refuses to overwrite and enforces allowed roots.
 
     The copy takes the input's permission bits, less execute and special bits,
     and the umask can narrow them further. A copy may still hold identifiers
@@ -137,7 +136,7 @@ def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
 
     # From here the file is ours, so removing it on failure is safe
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
     except BaseException:
         resolved.unlink(missing_ok=True)

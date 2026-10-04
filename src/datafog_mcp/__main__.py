@@ -38,6 +38,11 @@ def _build_parser() -> argparse.ArgumentParser:
     roots = sub.add_parser("roots", help="Show the directories datafog may read and write")
     roots.add_argument("--edit", action="store_true", help="Open the roots file in $EDITOR")
 
+    keys = sub.add_parser("keys", help="Manage local pseudonymization keys")
+    key_commands = keys.add_subparsers(dest="key_command", required=True)
+    create_key = key_commands.add_parser("create", help="Generate a key for a configured scope")
+    create_key.add_argument("scope", help="Scope name from policy.toml")
+
     return parser
 
 
@@ -95,6 +100,22 @@ def main() -> None:
             _edit_roots()
         else:
             _show_roots()
+        return
+
+    if args.command == "keys":
+        from .keys import KeyStorageError, generate_scope_key
+        from .policy import PolicyError as LocalPolicyError
+        from .policy import load_policy
+
+        try:
+            current_policy = load_policy()
+            scope = current_policy.pseudonymization_scopes.get(args.scope)
+            if scope is None:
+                raise KeyStorageError("Scope is not configured in the local policy.")
+            generate_scope_key(scope)
+        except (KeyStorageError, LocalPolicyError) as exc:
+            raise SystemExit(f"datafog-mcp: {exc}") from None
+        print("Pseudonymization key created. Preserve it to keep future outputs joinable.")
         return
 
     from .server import run_server

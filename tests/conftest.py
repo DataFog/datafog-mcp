@@ -34,6 +34,10 @@ def allow_test_paths(
     """
     roots = os.pathsep.join([str(tmp_path_factory.getbasetemp().resolve()), str(REPO_ROOT)])
     monkeypatch.setenv(ALLOWED_ROOTS_VAR, roots)
+    # Ordinary CI must never read personal policy, keychain, or model settings.
+    monkeypatch.setenv(
+        "DATAFOG_POLICY_PATH", str(tmp_path_factory.mktemp("policy") / "policy.toml")
+    )
 
 
 @pytest.fixture
