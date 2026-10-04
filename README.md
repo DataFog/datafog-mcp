@@ -185,7 +185,7 @@ uv run pyright
 uv run pytest
 ```
 
-CI runs these checks on Python 3.10–3.12, including deterministic product contracts and a real offline stdio session. Ordinary tests isolate policy files and use temporary credentials; they must not touch personal keychains or model downloads. See [current validation coverage](docs/validation/current-coverage.md) and the [implementation plan](docs/plans/user-flow-implementation.md).
+CI runs these checks on Python 3.10–3.12, including deterministic product contracts and a real offline stdio session. Ordinary tests isolate policy files and use temporary credentials; they must not touch personal keychains or model downloads. A separate [GLiNER fixture comparison](docs/validation/gliner-fixtures.md) downloads pinned public weights in an isolated GitHub Actions job; its diagnostic metrics do not qualify the shipped local detector. See [current validation coverage](docs/validation/current-coverage.md) and the [implementation plan](docs/plans/user-flow-implementation.md).
 
 ## Uninstall
 

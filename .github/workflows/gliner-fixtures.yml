@@ -1,0 +1,79 @@
+name: GLiNER fixture comparison
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/gliner-fixtures.yml'
+      - 'scripts/check_gliner_fixtures.py'
+      - 'scripts/gliner_fixture_runtime/**'
+      - 'tests/test_gliner_fixtures.py'
+      - 'tests/data/user_flows/**'
+      - 'docs/validation/gliner-fixtures.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/gliner-fixtures.yml'
+      - 'scripts/check_gliner_fixtures.py'
+      - 'scripts/gliner_fixture_runtime/**'
+      - 'tests/data/user_flows/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gliner-fixtures-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated CPU model dependencies
+        run: |
+          uv venv --python 3.12 .gliner-venv
+          uv pip install --python .gliner-venv/bin/python --extra-index-url https://download.pytorch.org/whl/cpu -r scripts/gliner_fixture_runtime/requirements.txt
+      - name: Prepare pinned public model
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: .gliner-venv/bin/python scripts/gliner_fixture_runtime/prepare_model.py --output "$RUNNER_TEMP/gliner-fixture-model"
+      - name: Compare synthetic fixtures with GLiNER
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TOKENIZERS_PARALLELISM: 'false'
+          OMP_NUM_THREADS: '2'
+        run: |
+          result_code=0
+          .gliner-venv/bin/python scripts/check_gliner_fixtures.py --model-directory "$RUNNER_TEMP/gliner-fixture-model" > "$RUNNER_TEMP/gliner-fixture-report.json" || result_code=$?
+          case "$result_code" in
+            0)
+              echo "Fixture comparison passed; this diagnostic does not qualify the production model." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            1)
+              echo "::warning::NOT QUALIFIED: GLiNER fixture comparison has exact-span mismatches. See the metrics artifact; this quality diagnostic is nonblocking."
+              echo "**NOT QUALIFIED — diagnostic comparison:** GLiNER has exact-span mismatches. This does not necessarily mean sensitive characters went undetected; boundaries or extra findings can differ. No production acceptance threshold has been established. See the metrics artifact." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::GLiNER fixture evaluation could not complete (runtime, schema, or provenance error)."
+              exit "$result_code"
+              ;;
+          esac
+          cat "$RUNNER_TEMP/gliner-fixture-report.json"
+      - name: Upload fixture comparison metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: gliner-fixture-metrics
+          path: ${{ runner.temp }}/gliner-fixture-report.json
+          if-no-files-found: error
+          retention-days: 14
