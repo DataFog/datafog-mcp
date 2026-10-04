@@ -84,7 +84,7 @@ Use a compatible CPU environment and the same isolated dependency setup:
 
 ```sh
 uv venv --python 3.12 .gliner-venv
-uv pip install --python .gliner-venv/bin/python --extra-index-url https://download.pytorch.org/whl/cpu -r scripts/gliner_fixture_runtime/requirements.txt
+uv pip install --python .gliner-venv/bin/python --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match --require-hashes -r scripts/gliner_fixture_runtime/requirements.txt
 .gliner-venv/bin/python scripts/gliner_fixture_runtime/prepare_model.py --output /tmp/gliner-fixture-model
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .gliner-venv/bin/python scripts/check_gliner_fixtures.py --model-directory /tmp/gliner-fixture-model
 ```
