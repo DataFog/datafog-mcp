@@ -28,6 +28,8 @@ from datafog_mcp.reader import (
 )
 
 if TYPE_CHECKING:
+    from datafog_core import _ScanConfig
+
     EntityType = str
 else:
     # Built from the engine's own list, so the schema cannot drift from what a
@@ -37,6 +39,7 @@ else:
 # Omit for the default set. An empty list asks for nothing, so the schema
 # declares it invalid rather than reading it as the default.
 EntitySelection = Annotated[list[EntityType], Field(min_length=1)] | None
+InputFormat = Literal["auto", "text", "env", "sql"]
 
 mcp = FastMCP(
     name="datafog",
@@ -104,11 +107,29 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
         raise ToolError(str(exc)) from exc
 
 
+def _core_scan_config(path: Path, input_format: InputFormat) -> _ScanConfig:
+    """Select Core's email boundaries without changing other detector settings.
+
+    Auto recognizes .env, .env.*, *.env, and *.sql filenames, ignoring case.
+    Other files retain plain-text boundaries, including CSV and TSV files.
+    An explicit format overrides the filename.
+    """
+    if input_format != "auto":
+        return {"format": input_format}
+    name = path.name.lower()
+    if name == ".env" or name.startswith(".env.") or name.endswith(".env"):
+        return {"format": "env"}
+    if name.endswith(".sql"):
+        return {"format": "sql"}
+    return {"format": "text"}
+
+
 @mcp.tool
 async def datafog_scan(
     path: str,
     mode: Mode = "findings",
     entity_types: EntitySelection = None,
+    input_format: InputFormat = "auto",
 ) -> dict[str, Any]:
     """
     Detect personal and sensitive data in a file, without reading it into
@@ -148,18 +169,25 @@ async def datafog_scan(
       CREDENTIAL_URI, CREDIT_CARD, DATE, EMAIL, JWT, NPI, PHONE, PRIVATE_KEY,
       SSN, US_ROUTING_NUMBER, and ZIP_CODE. IP_ADDRESS is available on
       request. Omit for the defaults; an empty list is refused.
+      input_format: Email boundary rules. Auto uses env for .env, .env.*,
+      and *.env files, sql for *.sql files (case-insensitive), and text for
+      other files. Choose env or sql for exports with other filenames, or
+      text to keep plain-text matching. ENV assignments and surrounding
+      SQL quotes are preserved by write tools. SQL backslash escapes,
+      dollar quoting, and encoded email characters are not interpreted.
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
       detected entities.
     """
     with _contained():
-        return await _scan_file(path, mode, entity_types)
+        return await _scan_file(path, mode, entity_types, input_format)
 
 
 async def _scan_file(
     path: str,
     mode: Mode,
     entity_types: list[str] | None,
+    input_format: InputFormat,
 ) -> dict[str, Any]:
     """
     Scan a file and build the response.
@@ -168,6 +196,7 @@ async def _scan_file(
       path: The file to scan.
       mode: What to return.
       entity_types: The types to keep, or None for the default.
+      input_format: Core email boundary rules, or auto for filename inference.
     Returns:
       The tool response describing what was found.
     """
@@ -179,7 +208,9 @@ async def _scan_file(
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
-    found = await asyncio.to_thread(scan, content.text)
+    found = await asyncio.to_thread(
+        scan, content.text, _core_scan_config(content.path, input_format)
+    )
     kept = [item for item in found if config.keeps(item.entity_type)]
 
     # The engine reports every detector's match, so one value can appear
@@ -200,6 +231,7 @@ async def _transform_to_file(
     output_path: str | None,
     entity_types: list[str] | None,
     strategy: Strategy,
+    input_format: InputFormat,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with detected values transformed.
@@ -209,6 +241,7 @@ async def _transform_to_file(
       output_path: Where to write, or None for a sibling of the input.
       entity_types: The types to transform, or None for the default.
       strategy: One of redact, mask, or remove.
+      input_format: Core email boundary rules, or auto for filename inference.
     Returns:
       The tool response describing what was replaced.
     """
@@ -227,7 +260,9 @@ async def _transform_to_file(
         else source.with_name(f"{source.stem}_{suffix}{source.suffix}")
     )
 
-    found = await asyncio.to_thread(scan, content.text)
+    found = await asyncio.to_thread(
+        scan, content.text, _core_scan_config(content.path, input_format)
+    )
     kept = [item for item in found if config.keeps(item.entity_type)]
 
     result = await asyncio.to_thread(transform, content.text, kept, transform_config(strategy))
@@ -250,6 +285,7 @@ async def datafog_redact(
     path: str,
     output_path: str | None = None,
     entity_types: EntitySelection = None,
+    input_format: InputFormat = "auto",
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data replaced by labels.
@@ -271,6 +307,8 @@ async def datafog_redact(
       _redacted suffix.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
+      input_format: Email boundary rules, as for datafog_scan. Defaults to
+      auto; explicit text, env, or sql overrides the filename.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -280,6 +318,7 @@ async def datafog_redact(
             output_path,
             entity_types,
             strategy="redact",
+            input_format=input_format,
         )
 
 
@@ -288,6 +327,7 @@ async def datafog_mask(
     path: str,
     output_path: str | None = None,
     entity_types: EntitySelection = None,
+    input_format: InputFormat = "auto",
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data covered over.
@@ -308,6 +348,8 @@ async def datafog_mask(
       a _masked suffix.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
+      input_format: Email boundary rules, as for datafog_scan. Defaults to
+      auto; explicit text, env, or sql overrides the filename.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -317,6 +359,7 @@ async def datafog_mask(
             output_path,
             entity_types,
             strategy="mask",
+            input_format=input_format,
         )
 
 
@@ -325,6 +368,7 @@ async def datafog_remove(
     path: str,
     output_path: str | None = None,
     entity_types: EntitySelection = None,
+    input_format: InputFormat = "auto",
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data deleted outright.
@@ -346,6 +390,8 @@ async def datafog_remove(
       a _removed suffix.
       entity_types: The types to delete. Defaults to the same types as
       datafog_scan; an empty list is refused.
+      input_format: Email boundary rules, as for datafog_scan. Defaults to
+      auto; explicit text, env, or sql overrides the filename.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -355,6 +401,7 @@ async def datafog_remove(
             output_path,
             entity_types,
             strategy="remove",
+            input_format=input_format,
         )
 
 
