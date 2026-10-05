@@ -8,7 +8,7 @@ First release: an MCP server that checks a file for personal data and credential
 
 ### Added
 
-- A contributor changelog check runs before commits and in PR CI, with explicit exemptions for changes that have no user-facing effect.
+- A contributor changelog check runs in PR CI, with explicit exemptions for changes that have no user-facing effect.
 - `datafog_scan` reports the entity types, per-type counts, and character offsets found in a file. A value two detectors both match is reported once, as the type the write tools would replace it with.
 - `datafog_redact`, `datafog_mask`, and `datafog_remove` write a transformed copy beside the original, which is never modified.
 - Detection by the [datafog-core](https://github.com/DataFog/datafog-core) engine, on this machine: email addresses, phone numbers, SSNs, credit card numbers, dates, ZIP codes, US routing numbers, NPIs, API keys, bearer tokens, JWTs, credentials embedded in URIs, and PEM private keys. IP addresses on request.
