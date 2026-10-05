@@ -5,6 +5,7 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -17,7 +18,23 @@ from datafog_mcp.model_runtime import (
 
 
 @pytest.fixture(autouse=True)
-def cleanup():
+def cleanup(monkeypatch):
+    # Windows does not execute shebang scripts. Only generated test peers are
+    # launched with Python; real PE executables use the production argv intact.
+    if sys.platform == "win32":
+        import datafog_mcp.model_runtime as module
+
+        original = module.subprocess.Popen
+
+        def popen(args, *positional, **kwargs):
+            executable = Path(args[0])
+            with executable.open("rb") as stream:
+                is_script = stream.read(2) == b"#!"
+            if is_script:
+                args = [sys.executable, *args]
+            return original(args, *positional, **kwargs)
+
+        monkeypatch.setattr(module.subprocess, "Popen", popen)
     yield
     close_model_runtimes()
 
@@ -25,7 +42,7 @@ def cleanup():
 def bundle(tmp_path: Path, body: str) -> Path:
     for name in ("model.onnx", "tokenizer.json", "config.json"):
         (tmp_path / name).touch()
-    executable = tmp_path / "datafog-pii"
+    executable = tmp_path / ("datafog-pii.exe" if sys.platform == "win32" else "datafog-pii")
     executable.write_text(f"#!{sys.executable}\nimport sys,json,time\n{body}\n")
     executable.chmod(0o700)
     return tmp_path
@@ -306,3 +323,14 @@ def test_csv_model_deadline_is_shared_and_writes_no_partial_copy(
     assert budgets == [10, 4]
     assert not destination.exists()
     assert source.read_text() == original
+
+
+@pytest.mark.parametrize(
+    "platform_name,expected",
+    [("win32", "datafog-pii.exe"), ("linux", "datafog-pii"), ("darwin", "datafog-pii")],
+)
+def test_executable_name_matches_platform(monkeypatch, platform_name, expected):
+    import datafog_mcp.model_runtime as module
+
+    monkeypatch.setattr(module, "sys", SimpleNamespace(platform=platform_name))
+    assert module._executable_name() == expected

@@ -12,6 +12,7 @@ import json
 import math
 import queue
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -23,6 +24,10 @@ MODEL_WINDOW_CHARS = 16_384
 MODEL_OVERLAP_CHARS = 1_024
 
 _LABELS = {"first_name": "PERSON", "last_name": "PERSON", "street_address": "STREET_ADDRESS"}
+
+
+def _executable_name() -> str:
+    return "datafog-pii.exe" if sys.platform == "win32" else "datafog-pii"
 
 
 class ModelRuntimeError(ValueError):
@@ -129,7 +134,7 @@ class _Runtime:
                 self.close()
                 try:
                     self.process = subprocess.Popen(
-                        [str(self.bundle / "datafog-pii"), str(self.bundle)],
+                        [str(self.bundle / _executable_name()), str(self.bundle)],
                         stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.DEVNULL,
@@ -214,7 +219,7 @@ def model_findings(
             "Local model timeout must be greater than 0 and at most 300 seconds."
         )
     bundle = Path(bundle_directory).expanduser().resolve()
-    required = ("datafog-pii", "model.onnx", "tokenizer.json", "config.json")
+    required = (_executable_name(), "model.onnx", "tokenizer.json", "config.json")
     if not all((bundle / name).is_file() for name in required):
         raise ModelRuntimeError("Local model bundle is missing required files.")
     signature = model_signature(bundle)
