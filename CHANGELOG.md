@@ -13,6 +13,7 @@ First release: an MCP server that checks a file for personal data and credential
 - Detection by the [datafog-core](https://github.com/DataFog/datafog-core) engine, on this machine: email addresses, phone numbers, SSNs, credit card numbers, dates, ZIP codes, US routing numbers, NPIs, API keys, bearer tokens, JWTs, credentials embedded in URIs, and PEM private keys. IP addresses on request.
 - Allowed roots confine every read and write to configured directories. `datafog-mcp roots` shows and edits them. Credential directories such as `.ssh` are always refused.
 - Owners can choose one copy destination in `policy.toml` using `datafog-mcp policy --edit`. Tool-selected filenames stay within that directory, subject to allowed roots and directory denials; absent policy keeps sibling copies. Invalid copy policy or insufficient destination disk space refuses writes.
+- The same policy supports exact per-entity allowlists, routine scanning folders/extensions constrained by allowed roots, and advisory ask/transform/stop guidance. `datafog_policy` exposes settings without exact allowlist values; each scan/write validates a fresh immutable snapshot, and invalid policy refuses access.
 
 ### Security
 
