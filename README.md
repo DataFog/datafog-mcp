@@ -155,7 +155,9 @@ Desktop storage uses supported macOS/Windows/Linux credential-store backends via
 
 Keys never belong in TOML or tool arguments. Setup does not replace existing keys, and tool calls never generate missing ones. Back up and transfer keys securely if joins must survive machine changes. Copying policy alone is insufficient. For explicit rotation, use a new reference/version (and a different file path for file storage), retain old keys if needed, and expect new outputs to stop joining old outputs. Unrelated scopes should have separate keys; scope names alone do not alter HMAC behavior.
 
-### Optional experimental name/address model
+### Optional experimental model: DataFog PII EN 65M
+
+The model repository is [DataFog/pii-en-65m](https://huggingface.co/DataFog/pii-en-65m), formerly `DataFog/datafog-pii`. Use its [download instructions](https://huggingface.co/DataFog/pii-en-65m/blob/main/DOWNLOAD.md) to install the correct platform bundle before serving. Model `v0.1.0` is pinned at `02cc6ca86a11dcb2b328861687770a22a7ea1b76`; native runtime `runtime-v0.2.0` is pinned at `7cadd41e21f59b2a149e31378d073cf6ca057531`. The separately published [DataFog/pii-en-71m](https://huggingface.co/DataFog/pii-en-71m) is a different model and is not used by this integration.
 
 A compatible local native bundle can be selected with:
 

@@ -124,3 +124,7 @@ control or evaluate another small model before claiming that target is met.
 The 100 MB file admission limit is not a claim that every detector/file format
 has acceptable throughput at that size. In particular, many-row CSV model scans
 have per-record overhead and can exhaust the shared operation deadline.
+
+## Canonical model identity
+
+This integration targets `DataFog/pii-en-65m` (formerly `DataFog/datafog-pii`). Naming changes preserve the frozen model/runtime commits and executable contract. The legacy `datafog-pii` / `datafog-pii.exe` filenames remain unchanged inside qualified archives. The older `DataFog/pii-en-71m` custom model is not covered by this integration or its qualification evidence.
