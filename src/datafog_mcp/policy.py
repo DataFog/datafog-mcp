@@ -45,9 +45,23 @@ version = 1
 # key_version = "1"
 # backend = "keyring"  # OS credential storage; explicit "file" for headless POSIX
 # key_file = "/absolute/private/customers.key"  # file backend only
+#
+# [model]
+# bundle_directory = "/absolute/path/from/model-install"
+# timeout_seconds = 30  # inference, including waiting and segmentation
 """
 
 Action = Literal["ask", "transform", "stop"]
+
+
+@dataclass(frozen=True)
+class ModelPolicy:
+    """An explicitly installed local model bundle, never a download instruction."""
+
+    bundle_directory: Path
+    timeout_seconds: float = 30
+
+
 WriteStrategy = Literal["redact", "mask", "remove", "pseudonymize"]
 
 
@@ -77,6 +91,7 @@ class OutputPolicy:
     transform_strategy: WriteStrategy = "redact"
     pseudonym_scope: str | None = None
     pseudonym_scopes: Mapping[str, PseudonymScope] = field(default_factory=dict)
+    model: ModelPolicy | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "pseudonym_scopes", MappingProxyType(dict(self.pseudonym_scopes)))
@@ -197,7 +212,7 @@ def load_output_policy() -> OutputPolicy:
             data = tomllib.load(handle)
     except (OSError, ValueError):
         raise OutputPolicyError("cannot read output policy as valid UTF-8 TOML") from None
-    if set(data) - {"version", "output", "allow", "scope", "workflow", "pseudonymization"}:
+    if set(data) - {"version", "output", "allow", "scope", "workflow", "pseudonymization", "model"}:
         raise OutputPolicyError("output policy contains an unknown setting")
     if type(data.get("version")) is not int or data["version"] != 1:
         raise OutputPolicyError("output policy must declare version = 1")
@@ -224,6 +239,31 @@ def load_output_policy() -> OutputPolicy:
     extensions = _strings(scope.get("extensions", []))
     if any(not re.fullmatch(r"\.[A-Za-z0-9]+", value) for value in extensions):
         raise OutputPolicyError("scanning scope extensions must be dot-prefixed file extensions")
+    model = None
+    if "model" in data:
+        entry = _table(data["model"], {"bundle_directory", "timeout_seconds"})
+        raw = entry.get("bundle_directory")
+        if not isinstance(raw, str) or not raw or "\x00" in raw:
+            raise OutputPolicyError("model requires an explicitly installed bundle directory")
+        try:
+            bundle = Path(raw).expanduser()
+            if not bundle.is_absolute():
+                raise OutputPolicyError("model bundle directory must be absolute or start with ~")
+            bundle = bundle.resolve(strict=True)
+            if not bundle.is_dir():
+                raise OutputPolicyError("model bundle directory must already exist")
+        except (OSError, RuntimeError):
+            raise OutputPolicyError(
+                "model bundle directory cannot be resolved; run explicit model setup"
+            ) from None
+        timeout = entry.get("timeout_seconds", 30)
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not 0 < timeout <= 300
+        ):
+            raise OutputPolicyError("model timeout must be greater than 0 and at most 300 seconds")
+        model = ModelPolicy(bundle, float(timeout))
     scopes = _pseudonym_scopes(data.get("pseudonymization", {}))
     workflow = _table(
         data.get("workflow", {}), {"on_findings", "transform_strategy", "pseudonym_scope"}
@@ -252,4 +292,5 @@ def load_output_policy() -> OutputPolicy:
         strategy,
         selected_scope,
         scopes,
+        model,
     )

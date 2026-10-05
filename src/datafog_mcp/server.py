@@ -7,19 +7,26 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import fastmcp
-from datafog_core import PrivacyManager, scan, transform
+from datafog_core import Finding, PrivacyManager, scan, transform
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from datafog_mcp import __version__
-from datafog_mcp.config import SUPPORTED_ENTITIES, ScanConfig, transform_config
+from datafog_mcp.config import (
+    DEFAULT_ENTITIES,
+    MODEL_ENTITIES,
+    SUPPORTED_ENTITIES,
+    ScanConfig,
+    transform_config,
+)
 from datafog_mcp.findings import (
     Mode,
     render,
     render_transformation,
 )
 from datafog_mcp.keys import KeyStorageError, LocalKeyProvider
+from datafog_mcp.model_runtime import ModelRuntimeError, model_findings
 from datafog_mcp.paths import PathNotAllowed, allowed_roots, resolve_input, resolve_output
 from datafog_mcp.policy import OutputPolicy, OutputPolicyError, WriteStrategy, load_output_policy
 from datafog_mcp.reader import (
@@ -48,7 +55,9 @@ mcp = FastMCP(
         "Local PII and credential detection and transformation. Scans "
         "files on disk for emails, phone numbers, SSNs, credit card "
         "numbers, dates, ZIP codes, bank routing numbers, NPIs, API "
-        "keys, tokens, and private keys, and can write a transformed "
+        "keys, tokens, and private keys. An explicitly installed optional model "
+        "adds PERSON and STREET_ADDRESS detection. Missing model support refuses "
+        "those requests with local setup guidance. The server can write a transformed "
         "copy. File contents are processed on this machine and never "
         "included in tool responses. Use datafog_policy to discover owner "
         "settings and whether a path should be scanned before reading. "
@@ -96,7 +105,7 @@ def _contained() -> Iterator[None]:
         ) from None
 
 
-def _config_from(entity_types: list[str] | None) -> ScanConfig:
+def _config_from(entity_types: list[str] | None, current: OutputPolicy) -> ScanConfig:
     """
     Build detection settings from optional tool arguments.
 
@@ -106,9 +115,16 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
       A validated ScanConfig.
     """
     try:
-        if entity_types is not None:
-            return ScanConfig(entities=tuple(entity_types))
-        return ScanConfig()
+        entities = tuple(entity_types) if entity_types is not None else DEFAULT_ENTITIES
+        if entity_types is None and current.model is not None:
+            entities += tuple(sorted(MODEL_ENTITIES))
+        config = ScanConfig(entities=entities)
+        if MODEL_ENTITIES.intersection(config.entities) and current.model is None:
+            raise ToolError(
+                "PERSON/STREET_ADDRESS require an installed model. Run `datafog-mcp model install` "
+                "locally and configure [model].bundle_directory in policy.toml."
+            )
+        return config
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
 
@@ -121,8 +137,13 @@ def _request_policy() -> OutputPolicy:
         raise ToolError(str(exc)) from None
 
 
-def _protect_key_file(path: Path, current: OutputPolicy) -> None:
-    """Refuse configured key files, including symbolic and hard-link aliases."""
+def _protect_private_resources(path: Path, current: OutputPolicy) -> None:
+    """Refuse configured model bundles and key files (including key aliases)."""
+    if current.model is not None:
+        resolved = path.resolve()
+        bundle = current.model.bundle_directory
+        if resolved == bundle or bundle in resolved.parents:
+            raise ToolError("Configured model bundles cannot be processed as data.")
     for scope in current.pseudonym_scopes.values():
         if scope.key_file is None:
             continue
@@ -140,7 +161,7 @@ def _checked_input(path: str, current: OutputPolicy) -> str:
         resolved = resolve_input(path)
     except PathNotAllowed as exc:
         raise ToolError(str(exc)) from None
-    _protect_key_file(resolved, current)
+    _protect_private_resources(resolved, current)
     return str(resolved)
 
 
@@ -180,11 +201,17 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
                 "transform_strategy": current.transform_strategy,
             },
         }
+        result["model"] = {
+            "configured": current.model is not None,
+            "entity_types": sorted(MODEL_ENTITIES),
+            "verified": False,
+            "setup_command": "datafog-mcp model install",
+        }
         result["pseudonymization_scopes"] = list(current.pseudonym_scopes)
         if current.pseudonym_scope is not None:
             result["workflow"]["pseudonym_scope"] = current.pseudonym_scope
         if resolved is not None:
-            _protect_key_file(resolved, current)
+            _protect_private_resources(resolved, current)
             result["scan_before_read"] = current.in_scope(resolved)
         return result
 
@@ -263,15 +290,15 @@ async def _scan_file(
       The tool response describing what was found.
     """
     # Config before the read, so bad input never touches the filesystem
-    config = _config_from(entity_types)
     current = _request_policy()
+    config = _config_from(entity_types, current)
 
     try:
         content = read_text_file(_checked_input(path, current), config.max_bytes)
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
-    found = await asyncio.to_thread(scan, content.text)
+    found = await _detections(content.text, config, current)
     kept = [
         item
         for item in found
@@ -304,6 +331,20 @@ async def _scan_file(
     return response
 
 
+async def _detections(text: str, config: ScanConfig, current: OutputPolicy) -> list[Finding]:
+    """Combine Core findings with explicitly requested, installed model categories."""
+    found = await asyncio.to_thread(scan, text)
+    if MODEL_ENTITIES.intersection(config.entities):
+        assert current.model is not None
+        try:
+            found += await asyncio.to_thread(
+                model_findings, text, current.model.bundle_directory, current.model.timeout_seconds
+            )
+        except ModelRuntimeError as exc:
+            raise ToolError(str(exc)) from None
+    return found
+
+
 async def _transform_to_file(
     path: str,
     output_path: str | None,
@@ -323,8 +364,8 @@ async def _transform_to_file(
     Returns:
       The tool response describing what was replaced.
     """
-    config = _config_from(entity_types)
     copy_policy = _request_policy()
+    config = _config_from(entity_types, copy_policy)
     selected = copy_policy.pseudonym_scopes.get(scope) if scope is not None else None
     provider = None
     if strategy == "pseudonymize":
@@ -352,11 +393,11 @@ async def _transform_to_file(
 
     try:
         destination = resolve_output(str(destination), source, copy_policy)
-        _protect_key_file(destination, copy_policy)
+        _protect_private_resources(destination, copy_policy)
     except PathNotAllowed as exc:
         raise ToolError(str(exc)) from None
 
-    found = await asyncio.to_thread(scan, content.text)
+    found = await _detections(content.text, config, copy_policy)
     kept = [
         item
         for item in found

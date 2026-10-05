@@ -124,11 +124,10 @@ def test_unsupported_entity_type_reports_tool_error() -> None:
     """
     A type the engine cannot report is refused at the schema.
 
-    PERSON needs structured input the server never passes, so a text scan
-    could only return nothing for it and report that as success.
+    UUID needs a Core configuration flag the server does not offer.
     """
     with pytest.raises(ToolError, match="entity_types"):
-        _call(path=str(DATA), entity_types=["PERSON"])
+        _call(path=str(DATA), entity_types=["UUID"])
 
 
 @pytest.mark.parametrize(

@@ -4,7 +4,7 @@ An MCP server that lets an AI agent check a file for personally identifiable inf
 
 Detection runs locally on the [datafog-core](https://github.com/DataFog/datafog-core) engine.
 
-**What stays on the machine.** File contents are read and processed locally, and the server makes no network requests while running. FastMCP's update check is switched off, and its OpenTelemetry hooks do nothing unless you install an OpenTelemetry SDK and configure an exporter yourself. Tool responses are a different matter: they go into the agent's context, and the agent sends its context to its model provider. That is why responses carry no file contents or matched values. Installing the server downloads packages, which is separate from running it.
+**What stays on the machine.** File contents are read and processed locally, and the server makes no network requests while running. FastMCP's update check is switched off, and its OpenTelemetry hooks do nothing unless you install an OpenTelemetry SDK and configure an exporter yourself. Tool responses are a different matter: they go into the agent's context, and the agent sends its context to its model provider. That is why responses carry no file contents or matched values. Installing the server downloads packages. Optional `datafog-mcp model install` downloads a pinned model/runtime archive during explicit setup, separate from serving MCP requests.
 
 **What this does and does not protect.** No tool response contains file contents or matched values, so "is this file sensitive" can be answered without the answer carrying the sensitive parts. That is the whole of the guarantee. Note that the agent can still open the file directly, and sometimes will.
 
@@ -202,6 +202,34 @@ pseudonym_scope = "customers"
 
 `datafog_policy` and `datafog-mcp policy` expose configured scope names without retrieving keys. A workflow naming an absent scope is invalid. Preserve the key, reference/version, and policy securely if future outputs must remain joinable. Deleting or replacing a key breaks linkage with earlier outputs; no key export, recovery, or rotation command is provided in this release.
 
+### Optional local name and street-address model
+
+An ordinary Core installation uses the existing pattern detectors. For local name/address detection, explicitly install DataFog PII EN 65M model **0.1.0** with native runtime **0.2.0**:
+
+```bash
+datafog-mcp model install
+```
+
+Setup downloads the platform-specific archive from the public `DataFog/pii-en-65m` Hugging Face repository at an immutable revision, verifies pinned archive and manifest SHA-256 hashes plus every bundled file, and probes the verified native runtime. It needs about 1.4 GB of free space for staging and installation and refuses an existing installation directory. Downloads never happen from a tool call or server startup. No Hugging Face account, Python ML stack, or hosted inference is required.
+
+The command prints the installed path. Opt in by adding it to `policy.toml`:
+
+```toml
+[model]
+bundle_directory = "/absolute/path/printed/by/model-install"
+timeout_seconds = 30
+```
+
+Then run `datafog-mcp model status` locally to verify the configured installation. For offline or managed setup, use `model install --archive /absolute/path/to/the/pinned-archive.tar.gz --directory /new/absolute/directory`. The same verification applies. Installation is complete only after its receipt is written; failures clean up the new directory. Existing model directories are never replaced automatically.
+
+With a configured model, default scans and all five file tools additionally detect `PERSON` and `STREET_ADDRESS`. An explicit `entity_types` list replaces the defaults: selecting only Core categories skips model inference. Explicitly requesting model categories without a configured bundle returns setup guidance before reading the source. A failed requested model never yields a Core-only success or writes a copy. Names are first-name and last-name spans, not identity resolution. Model email/phone/customer/account predictions are not used by this adapter; those existing categories keep their Core detector semantics.
+
+The adapter verifies the pinned installation before its first process launch and again after bundle file identities change, uses bounded local JSONL transport, and shares one inference deadline across queueing and text segments. Outputs go through the same overlap resolution, exact allowlists, copy restrictions, and pseudonymization key setup as Core findings. Model files are refused as data inputs/output destinations. Discovery reports configuration separately from verification. The model remains experimental; a clean scan is not proof a file is free of sensitive data.
+
+Qualified release platforms: Linux x86_64/aarch64 with glibc >=2.28; macOS arm64 >=14 or x86_64 >=15; Windows x86_64 (requires the x64 Visual C++ v14 redistributable). Other architectures, musl/Alpine, and older OS versions are refused. These archives were qualified on named native runners, not every possible device. The MCP pairing is currently pinned to MCP 0.1.0 and Core 0.4.1/0.4.2; other versions need explicit qualification.
+
+See [model installation and compatibility](docs/model-installation.md) for release provenance, integrity checks, qualification scope, standalone usage, and integration limitations.
+
 ## Uninstall
 
 Remove the registration first. If the program goes first, Claude Code fails to start `datafog` in every session (`ENOENT`) until the registration is removed too.
@@ -223,9 +251,11 @@ If you remove both configuration files, `rmdir ~/.config/datafog` removes the no
 
 If you set `DATAFOG_MCP_ALLOWED_ROOTS` in your shell profile, remove it there.
 
-The server keeps no cache, log, or data directory of its own.
+The server keeps no input-data cache or log of its own. Explicit model setup stores the chosen model bundle; it is retained on uninstall.
 
 These remain, on purpose:
+
+- **Optional model installations.** Remove the configured installation directory manually if no longer needed, and remove its `[model]` settings from `policy.toml`. Uninstalling the Python package preserves downloaded bundles.
 
 - **Copies the tools wrote.** These are your files, saved beside their originals or in your configured output directory with `_redacted`, `_masked`, `_removed`, or `_pseudonymized` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
 

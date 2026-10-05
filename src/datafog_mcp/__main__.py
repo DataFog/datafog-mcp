@@ -49,6 +49,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     create.add_argument("scope", help="Scope name configured in policy.toml")
 
+    model = sub.add_parser("model", help="Explicit optional local model installation")
+    model_commands = model.add_subparsers(dest="model_command", required=True)
+    install = model_commands.add_parser("install", help="Install the pinned native model release")
+    install.add_argument("--directory", type=str, help="New absolute installation directory")
+    install.add_argument(
+        "--archive", type=str, help="Already downloaded pinned archive (offline setup)"
+    )
+    model_commands.add_parser("status", help="Verify the explicitly configured local model")
+
     return parser
 
 
@@ -101,6 +110,33 @@ def main() -> None:
     """
     args = _build_parser().parse_args()
 
+    if args.command == "model":
+        from pathlib import Path
+
+        from .model_install import (
+            ModelInstallError,
+            default_directory,
+            install_model,
+            verify_bundle,
+        )
+
+        try:
+            if args.model_command == "install":
+                destination = Path(args.directory) if args.directory else default_directory()
+                archive = Path(args.archive).expanduser() if args.archive else None
+                installed = install_model(destination, archive)
+                print(f"Model installed and verified: {installed}")
+                print("Enable it in policy.toml: [model] bundle_directory = the installed path.")
+            else:
+                current = load_output_policy()
+                if current.model is None:
+                    raise ModelInstallError("No model is configured; run explicit model setup.")
+                verify_bundle(current.model.bundle_directory)
+                print("Configured model installation verified.")
+        except (ModelInstallError, OutputPolicyError) as exc:
+            raise SystemExit(f"datafog-mcp: {exc}") from None
+        return
+
     if args.command == "keys":
         from .keys import KeyStorageError, generate_scope_key
 
@@ -133,6 +169,9 @@ def main() -> None:
             print("Extensions: " + (", ".join(current.scope_extensions) or "all"))
             print(f"On findings: {current.on_findings} (advisory)")
             print(f"Suggested transformation: {current.transform_strategy}")
+            print(
+                "Local model: " + ("configured" if current.model is not None else "not configured")
+            )
             print("Pseudonymization scopes: " + (", ".join(current.pseudonym_scopes) or "none"))
             if current.pseudonym_scope:
                 print(f"Suggested pseudonym scope: {current.pseudonym_scope}")

@@ -43,16 +43,16 @@ def test_unsupported_entities_are_named() -> None:
     Previously an unsupported type returned zero findings and reported
     success, so a caller could not tell "no PII" from "cannot detect."
     """
-    with pytest.raises(ValueError, match="PERSON, SECRET"):
-        ScanConfig(entities=("EMAIL", "SECRET", "PERSON"))
+    with pytest.raises(ValueError, match="SECRET, UNKNOWN"):
+        ScanConfig(entities=("EMAIL", "SECRET", "UNKNOWN"))
 
 
-@pytest.mark.parametrize("entity", ["PERSON", "UUID", "DE_IBAN"])
+@pytest.mark.parametrize("entity", ["UUID", "DE_IBAN"])
 def test_types_a_text_scan_cannot_report_are_unsupported(entity: str) -> None:
     """
     Types the engine knows but a plain text scan never reports are refused.
 
-    PERSON needs structured input, UUID a config flag, and DE_IBAN a locale.
+    UUID needs a config flag and DE_IBAN a locale.
     The server passes none of these, so accepting them would return an empty
     result reported as success.
 
