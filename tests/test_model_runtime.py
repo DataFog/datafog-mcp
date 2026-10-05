@@ -2,10 +2,12 @@
 
 import json
 import os
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -24,17 +26,24 @@ def cleanup(monkeypatch):
     if sys.platform == "win32":
         import datafog_mcp.model_runtime as module
 
-        original = module.subprocess.Popen
+        class ScriptPeerPopen(subprocess.Popen[bytes]):
+            def __init__(self, args: list[str], *positional: Any, **kwargs: Any):
+                executable = Path(args[0])
+                with executable.open("rb") as stream:
+                    is_script = stream.read(2) == b"#!"
+                if is_script:
+                    args = [sys.executable, *args]
+                super().__init__(args, *positional, **kwargs)
 
-        def popen(args, *positional, **kwargs):
-            executable = Path(args[0])
-            with executable.open("rb") as stream:
-                is_script = stream.read(2) == b"#!"
-            if is_script:
-                args = [sys.executable, *args]
-            return original(args, *positional, **kwargs)
-
-        monkeypatch.setattr(module.subprocess, "Popen", popen)
+        # Confine the shim to the adapter. MCP's Windows utilities must retain
+        # the real, subscriptable subprocess.Popen class at import time.
+        monkeypatch.setattr(
+            module,
+            "subprocess",
+            SimpleNamespace(
+                Popen=ScriptPeerPopen, PIPE=subprocess.PIPE, DEVNULL=subprocess.DEVNULL
+            ),
+        )
     yield
     close_model_runtimes()
 
