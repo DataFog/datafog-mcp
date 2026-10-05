@@ -35,22 +35,19 @@ def _text_scan_entities() -> frozenset[str]:
 SUPPORTED_ENTITIES: frozenset[str] = _text_scan_entities()
 
 # Which types are on by default is a product decision, so this stays
-# explicit rather than following the engine's list. IP_ADDRESS is
-# supported but opt-in.
+# explicit rather than following the engine's list. DATE, ZIP_CODE, PHONE,
+# and IP_ADDRESS are supported but opt-in.
 DEFAULT_ENTITIES: tuple[str, ...] = (
     "API_KEY",
     "BEARER_TOKEN",
     "CREDENTIAL_URI",
     "CREDIT_CARD",
-    "DATE",
     "EMAIL",
     "JWT",
     "NPI",
-    "PHONE",
     "PRIVATE_KEY",
     "SSN",
     "US_ROUTING_NUMBER",
-    "ZIP_CODE",
 )
 
 Strategy = Literal["mask", "redact", "remove"]
