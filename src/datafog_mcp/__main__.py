@@ -58,6 +58,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     model_commands.add_parser("status", help="Verify the explicitly configured local model")
 
+    activity = sub.add_parser("activity", help="Explicit optional activity-log setup")
+    activity_commands = activity.add_subparsers(dest="activity_command", required=True)
+    activity_commands.add_parser(
+        "init", help="Create a private log without replacing existing files"
+    )
+    activity_commands.add_parser("status", help="Check configured log permissions and capacity")
+
     return parser
 
 
@@ -109,6 +116,24 @@ def main() -> None:
     Console entry point: `datafog-mcp`.
     """
     args = _build_parser().parse_args()
+
+    if args.command == "activity":
+        from .activity import ActivityStorageError, initialize, verify
+
+        try:
+            current = load_output_policy()
+            if args.activity_command == "init":
+                initialize(current)
+                print("Private activity file initialized; existing records are never replaced.")
+            else:
+                verify(current)
+                print(
+                    "Activity storage verified; "
+                    + ("logging enabled." if current.activity.enabled else "logging disabled.")
+                )
+        except (OutputPolicyError, ActivityStorageError) as exc:
+            raise SystemExit(f"datafog-mcp: {exc}") from None
+        return
 
     if args.command == "model":
         from pathlib import Path
@@ -171,6 +196,10 @@ def main() -> None:
             print(f"Suggested transformation: {current.transform_strategy}")
             print(
                 "Local model: " + ("configured" if current.model is not None else "not configured")
+            )
+            print(
+                "Activity logging: "
+                + ("enabled (best effort)" if current.activity.enabled else "disabled")
             )
             print("Pseudonymization scopes: " + (", ".join(current.pseudonym_scopes) or "none"))
             if current.pseudonym_scope:

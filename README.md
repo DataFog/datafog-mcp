@@ -163,7 +163,33 @@ Follow `ask`, `transform`, or `stop` when findings remain. With `transform`, rev
 
 For example, checking `"Contact private-person@example.com"` reports one EMAIL span and the default `ask` guidance without returning the address. After revising the message to remove the address, recheck the revised text. Existing user authorization is still required for any eventual send.
 
-Draft text is already in the agent's context and is also sent as a tool argument. The client/model provider may retain it; this check cannot undo that exposure. Never read an unscanned file to supply its contents as draft text: use the path-based scan first. Draft validation and processing errors withhold argument values; DataFog adds no draft log or persistence. Owner configuration and installed model files may be read, but the tool does not read source data files. Allowed roots and scanning scope apply to file access, not already-composed text.
+Draft text is already in the agent's context and is also sent as a tool argument. The client/model provider may retain it; this check cannot undo that exposure. Never read an unscanned file to supply its contents as draft text: use the path-based scan first. Draft validation and processing errors withhold argument values; DataFog never saves draft contents. Optional activity logging records only the metadata described below. Owner configuration and installed model files may be read, but the tool does not read source data files. Allowed roots and scanning scope apply to file access, not already-composed text.
+
+### Optional local activity records
+
+Activity logging is **off by default**. Opt in through `policy.toml` and explicit local setup on macOS/Linux or another POSIX host:
+
+```toml
+[activity]
+enabled = true
+path = "~/.local/share/datafog/activity/activity.jsonl"
+```
+
+Create a dedicated directory owned by you with mode 0700, then initialize the fresh log:
+
+```sh
+mkdir -m 700 -p ~/.local/share/datafog/activity
+datafog-mcp activity init
+datafog-mcp activity status
+```
+
+Setup refuses an existing file; tools never create or replace the log. The file must be owner-controlled, mode 0600, and a regular file with one link. Symlinks in the file or any parent are refused. Use a dedicated directory separate from configuration, keys, model assets, and data inputs. The configured activity directory and aliases to its log are refused as data inputs/copy destinations, even after logging is disabled. Windows private-file permissions have not been qualified: tools continue with a logging warning if it is enabled there, and local setup/status refuse unsupported storage.
+
+Each JSONL record has only `schema`, UTC `time`, a fixed `operation` name, `outcome` (`success` or `error`), and per-type `counts`. No source/draft text, matched values, file paths, filenames, offsets, digests, key references, scope names, exception details, or raw arguments are recorded. All seven tools participate, including policy discovery and refused calls after valid policy loading. Counts are empty on failures; they do not describe a partial scan. Requests use one immutable policy snapshot. CLI setup, handshakes, unknown tools, invalid policies, cancellations, and process crashes are not guaranteed to produce records.
+
+Logging is best effort. Completed tool responses include `activity_log.status` (`recorded` or `unavailable`) when enabled. An unavailable log adds a fixed warning in both structured/text responses; on a tool failure, the warning accompanies the original sanitized error. A logging failure never turns an already-written copy into a reported transformation failure or makes a failed scan appear successful. No network exporter or automatic deletion/rotation is provided, and these local records are neither tamper-proof nor a complete security audit trail.
+
+The fixed **10 MiB cap** stops further appends and reports logging unavailable while preserving existing records. A nonblocking file lock serializes cooperating writers; lock contention can also leave a gap with a warning. Appends are flushed to disk; detected short/write failures attempt to restore the previous length. A hard crash or filesystem failure can still leave an incomplete final line. Use `activity status` to check permissions and capacity without reading or appending records. Review/archive/remove the file locally, then use `activity init` for a fresh file; setup never truncates one for you. Set `enabled = false` to stop records. Uninstall preserves the file for your own retention/deletion decision.
 
 ### Consistent pseudonyms and local key setup
 
@@ -262,9 +288,11 @@ If you remove both configuration files, `rmdir ~/.config/datafog` removes the no
 
 If you set `DATAFOG_MCP_ALLOWED_ROOTS` in your shell profile, remove it there.
 
-The server keeps no input-data cache or log of its own. Explicit model setup stores the chosen model bundle; it is retained on uninstall.
+The server keeps no input-data cache or content log. Optional activity records contain metadata only; explicit model setup stores the chosen model bundle. Both are retained on uninstall.
 
 These remain, on purpose:
+
+- **Optional activity records.** Disable logging and remove/archive the configured log locally when no longer needed. Remove the `[activity]` settings if retiring its dedicated directory. Uninstall does not delete these records.
 
 - **Optional model installations.** Remove the configured installation directory manually if no longer needed, and remove its `[model]` settings from `policy.toml`. Uninstalling the Python package preserves downloaded bundles.
 
