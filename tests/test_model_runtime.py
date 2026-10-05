@@ -329,7 +329,9 @@ def test_csv_model_deadline_is_shared_and_writes_no_partial_copy(
     "platform_name,expected",
     [("win32", "datafog-pii.exe"), ("linux", "datafog-pii"), ("darwin", "datafog-pii")],
 )
-def test_executable_name_matches_platform(monkeypatch, platform_name, expected):
+def test_executable_name_matches_platform(
+    monkeypatch: pytest.MonkeyPatch, platform_name: str, expected: str
+):
     import datafog_mcp.model_runtime as module
 
     monkeypatch.setattr(module, "sys", SimpleNamespace(platform=platform_name))
