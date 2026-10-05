@@ -13,7 +13,7 @@ The guarantee holds when a tool fails, too. An unexpected error returns only its
 What responses do carry:
 
 - **Paths.** Every response names the files it read and wrote, and errors name the path they refused. A filename like `jane_doe_lab_results.csv` identifies a person on its own.
-- **Metadata.** Entity types, per-type counts, and character offsets. These reveal that a file holds, say, two email addresses at known positions, without revealing the addresses.
+- **Metadata.** Entity types, per-type counts, and character offsets, plus numeric record/column locations for tables. These reveal that a file holds, say, two email addresses at known positions, without revealing addresses, cell values, or header text.
 - **Allowed roots.** A refused path returns the configured roots, which name directories on your machine.
 
 ## Requirements
@@ -46,7 +46,7 @@ Every tool takes a path and returns a path. None returns file contents or matche
 |---|---|---|
 | `datafog_scan` | Reports entity types, counts, and character offsets | — |
 | `datafog_redact` | Replaces each value with a label naming its kind, `[EMAIL]` | `name_redacted.ext` |
-| `datafog_mask` | Covers each value character for character, preserving length | `name_masked.ext` |
+| `datafog_mask` | Covers each value character for character, preserving decoded value length | `name_masked.ext` |
 | `datafog_remove` | Deletes each value outright, leaving no marker | `name_removed.ext` |
 
 The write tools create a sibling of the input and never modify the original. An existing file at the destination is never overwritten. `output_path` can name the file but not move it to another directory.
@@ -65,7 +65,19 @@ Credential detection covers common formats. It is not a substitute for a dedicat
 
 ## Supported files
 
-UTF-8 text, up to 1 MiB (1,048,576 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. Detection reads the file as flat text, so it finds values anywhere in it but has no notion of columns or fields.
+UTF-8 text, up to 1 MiB (1,048,576 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. CSV/TSV files are scanned as decoded cells; other files are scanned as flat text.
+
+### CSV and TSV
+
+All four tools accept `input_format`: `auto` (default) selects comma-separated CSV for `.csv` and tab-separated TSV for `.tsv`, ignoring extension case; other extensions use plain text. Choose `csv` or `tsv` explicitly for another filename, or `text` to force flat scanning.
+
+The first record is a header by default (`has_header=true`). It supplies context for label-sensitive detectors such as NPI and routing numbers, and is preserved without scanning or transforming its contents. Set `has_header=false` for headerless files, or when the first record may itself contain sensitive values that need processing. Header presence is never guessed.
+
+Scan findings add numeric `record` and `column` fields, both one-based; record 1 is the first data record after the header. A quoted multiline cell is part of one record. `start`/`end` remain character offsets into the original raw file, including its BOM, line endings, and doubled quote escapes. Header strings are never returned, because they can contain sensitive data too.
+
+Writes preserve the delimiter, record/column structure, headers, BOM, line endings, and untouched cell syntax. Changed cells are quoted and embedded double quotes escaped; removing the sole value in a one-column record writes `""` rather than a blank line. Masking preserves decoded value length, but added CSV quotes can change the serialized file length.
+
+This supports comma/tab delimiters and double-quote escaping, including quoted multiline values and duplicate or empty headers. Unterminated quotes, quotes inside unquoted fields, trailing text after quoted fields, inconsistent column counts, and blank records are refused with a content-free error. Empty and header-only files are valid. Other delimiters and backslash escaping require conversion or an explicit plain-text scan; plain-text transformation does not guarantee table structure.
 
 Refused with an error, never scanned:
 

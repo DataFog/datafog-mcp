@@ -137,7 +137,7 @@ def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
 
     # From here the file is ours, so removing it on failure is safe
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
     except BaseException:
         resolved.unlink(missing_ok=True)

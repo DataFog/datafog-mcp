@@ -14,6 +14,7 @@ from pydantic import Field
 
 from datafog_mcp import __version__
 from datafog_mcp.config import SUPPORTED_ENTITIES, ScanConfig, Strategy, transform_config
+from datafog_mcp.csv_processing import CellResult, CsvError, process_csv
 from datafog_mcp.findings import (
     Mode,
     render,
@@ -37,6 +38,7 @@ else:
 # Omit for the default set. An empty list asks for nothing, so the schema
 # declares it invalid rather than reading it as the default.
 EntitySelection = Annotated[list[EntityType], Field(min_length=1)] | None
+InputFormat = Literal["auto", "text", "csv", "tsv"]
 
 mcp = FastMCP(
     name="datafog",
@@ -109,6 +111,8 @@ async def datafog_scan(
     path: str,
     mode: Mode = "findings",
     entity_types: EntitySelection = None,
+    input_format: InputFormat = "auto",
+    has_header: bool = True,
 ) -> dict[str, Any]:
     """
     Detect personal and sensitive data in a file, without reading it into
@@ -148,18 +152,24 @@ async def datafog_scan(
       CREDENTIAL_URI, CREDIT_CARD, DATE, EMAIL, JWT, NPI, PHONE, PRIVATE_KEY,
       SSN, US_ROUTING_NUMBER, and ZIP_CODE. IP_ADDRESS is available on
       request. Omit for the defaults; an empty list is refused.
+      input_format: auto parses .csv/.tsv by extension; text forces flat scanning.
+      csv and tsv explicitly select comma or tab tables for any filename.
+      has_header: For tables, preserve the first record as header context (default).
+      Set false for headerless files or to scan/transform every record as data.
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
       detected entities.
     """
     with _contained():
-        return await _scan_file(path, mode, entity_types)
+        return await _scan_file(path, mode, entity_types, input_format, has_header)
 
 
 async def _scan_file(
     path: str,
     mode: Mode,
     entity_types: list[str] | None,
+    input_format: InputFormat,
+    has_header: bool,
 ) -> dict[str, Any]:
     """
     Scan a file and build the response.
@@ -168,6 +178,8 @@ async def _scan_file(
       path: The file to scan.
       mode: What to return.
       entity_types: The types to keep, or None for the default.
+      input_format: Explicit file format or automatic extension selection.
+      has_header: Whether a table's first record supplies header context.
     Returns:
       The tool response describing what was found.
     """
@@ -179,14 +191,12 @@ async def _scan_file(
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
-    found = await asyncio.to_thread(scan, content.text)
-    kept = [item for item in found if config.keeps(item.entity_type)]
-
-    # The engine reports every detector's match, so one value can appear
-    # twice: an NPI is also a valid phone number. Transforming resolves those
-    # overlaps, so the scan reports exactly the spans the write tools replace.
-    # The transformed text is discarded.
-    resolved = await asyncio.to_thread(transform, content.text, kept, transform_config("redact"))
+    try:
+        resolved = await asyncio.to_thread(
+            _process_file, content.text, content.path, config, "redact", input_format, has_header
+        )
+    except CsvError as exc:
+        raise ToolError(str(exc)) from None
 
     return render(
         mode=mode,
@@ -200,6 +210,8 @@ async def _transform_to_file(
     output_path: str | None,
     entity_types: list[str] | None,
     strategy: Strategy,
+    input_format: InputFormat,
+    has_header: bool,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with detected values transformed.
@@ -209,6 +221,8 @@ async def _transform_to_file(
       output_path: Where to write, or None for a sibling of the input.
       entity_types: The types to transform, or None for the default.
       strategy: One of redact, mask, or remove.
+      input_format: Explicit file format or automatic extension selection.
+      has_header: Whether a table's first record supplies header context.
     Returns:
       The tool response describing what was replaced.
     """
@@ -227,10 +241,12 @@ async def _transform_to_file(
         else source.with_name(f"{source.stem}_{suffix}{source.suffix}")
     )
 
-    found = await asyncio.to_thread(scan, content.text)
-    kept = [item for item in found if config.keeps(item.entity_type)]
-
-    result = await asyncio.to_thread(transform, content.text, kept, transform_config(strategy))
+    try:
+        result = await asyncio.to_thread(
+            _process_file, content.text, source, config, strategy, input_format, has_header
+        )
+    except CsvError as exc:
+        raise ToolError(str(exc)) from None
 
     try:
         written = write_text_file(destination, result.text, beside=source)
@@ -250,6 +266,8 @@ async def datafog_redact(
     path: str,
     output_path: str | None = None,
     entity_types: EntitySelection = None,
+    input_format: InputFormat = "auto",
+    has_header: bool = True,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data replaced by labels.
@@ -271,6 +289,10 @@ async def datafog_redact(
       _redacted suffix.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
+      input_format: auto parses .csv/.tsv by extension; text forces flat scanning.
+      csv and tsv explicitly select comma or tab tables for any filename.
+      has_header: Preserve the first table record as header context (default).
+      Set false for headerless files or to process every record as data.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -280,6 +302,8 @@ async def datafog_redact(
             output_path,
             entity_types,
             strategy="redact",
+            input_format=input_format,
+            has_header=has_header,
         )
 
 
@@ -288,13 +312,15 @@ async def datafog_mask(
     path: str,
     output_path: str | None = None,
     entity_types: EntitySelection = None,
+    input_format: InputFormat = "auto",
+    has_header: bool = True,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data covered over.
 
-    Each detected value is replaced character for character, so the copy keeps
-    the original length and column alignment but reveals neither the value nor
-    what kind of value it was.
+    Each detected value is replaced character for character, preserving its
+    decoded length but revealing neither the value nor what kind it was.
+    Table serialization may add quotes around changed cells.
 
     Use datafog_redact when the reader should still know what kind of thing was
     removed.
@@ -308,6 +334,10 @@ async def datafog_mask(
       a _masked suffix.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
+      input_format: auto parses .csv/.tsv by extension; text forces flat scanning.
+      csv and tsv explicitly select comma or tab tables for any filename.
+      has_header: Preserve the first table record as header context (default).
+      Set false for headerless files or to process every record as data.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -317,6 +347,8 @@ async def datafog_mask(
             output_path,
             entity_types,
             strategy="mask",
+            input_format=input_format,
+            has_header=has_header,
         )
 
 
@@ -325,6 +357,8 @@ async def datafog_remove(
     path: str,
     output_path: str | None = None,
     entity_types: EntitySelection = None,
+    input_format: InputFormat = "auto",
+    has_header: bool = True,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data deleted outright.
@@ -346,6 +380,10 @@ async def datafog_remove(
       a _removed suffix.
       entity_types: The types to delete. Defaults to the same types as
       datafog_scan; an empty list is refused.
+      input_format: auto parses .csv/.tsv by extension; text forces flat scanning.
+      csv and tsv explicitly select comma or tab tables for any filename.
+      has_header: Preserve the first table record as header context (default).
+      Set false for headerless files or to process every record as data.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -355,7 +393,39 @@ async def datafog_remove(
             output_path,
             entity_types,
             strategy="remove",
+            input_format=input_format,
+            has_header=has_header,
         )
+
+
+def _process_file(
+    text: str,
+    source: Path,
+    config: ScanConfig,
+    strategy: Strategy,
+    input_format: InputFormat,
+    has_header: bool,
+) -> CellResult:
+    """Run Core on decoded table cells or on plain text, in a worker thread."""
+    selected: str = input_format
+    if selected == "auto":
+        selected = {".csv": "csv", ".tsv": "tsv"}.get(source.suffix.lower(), "text")
+
+    def process(text: str, value_start: int) -> CellResult:
+        found = [
+            item
+            for item in scan(text)
+            if config.keeps(item.entity_type)
+            and value_start <= item.codepoint_range.start < item.codepoint_range.end <= len(text)
+        ]
+        # Core resolves overlapping detectors identically for scans and writes.
+        return transform(text, found, transform_config(strategy))
+
+    if selected in ("csv", "tsv"):
+        return process_csv(
+            text, process, delimiter="," if selected == "csv" else "\t", has_header=has_header
+        )
+    return process(text, 0)
 
 
 def run_server() -> None:
