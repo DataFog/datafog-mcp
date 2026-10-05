@@ -49,6 +49,11 @@ version = 1
 # [model]
 # bundle_directory = "/absolute/path/from/model-install"
 # timeout_seconds = 30  # inference, including waiting and segmentation
+#
+# [activity]
+# enabled = true  # off by default; metadata only, best effort
+# path = "~/.local/share/datafog/activity/activity.jsonl"
+# Run `datafog-mcp activity init` after creating its private parent directory.
 """
 
 Action = Literal["ask", "transform", "stop"]
@@ -60,6 +65,14 @@ class ModelPolicy:
 
     bundle_directory: Path
     timeout_seconds: float = 30
+
+
+@dataclass(frozen=True)
+class ActivityPolicy:
+    """Explicit local metadata logging, independent of successful tool operations."""
+
+    enabled: bool = False
+    path: Path | None = None
 
 
 WriteStrategy = Literal["redact", "mask", "remove", "pseudonymize"]
@@ -92,6 +105,7 @@ class OutputPolicy:
     pseudonym_scope: str | None = None
     pseudonym_scopes: Mapping[str, PseudonymScope] = field(default_factory=dict)
     model: ModelPolicy | None = None
+    activity: ActivityPolicy = field(default_factory=ActivityPolicy)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "pseudonym_scopes", MappingProxyType(dict(self.pseudonym_scopes)))
@@ -212,7 +226,16 @@ def load_output_policy() -> OutputPolicy:
             data = tomllib.load(handle)
     except (OSError, ValueError):
         raise OutputPolicyError("cannot read output policy as valid UTF-8 TOML") from None
-    if set(data) - {"version", "output", "allow", "scope", "workflow", "pseudonymization", "model"}:
+    if set(data) - {
+        "version",
+        "output",
+        "allow",
+        "scope",
+        "workflow",
+        "pseudonymization",
+        "model",
+        "activity",
+    }:
         raise OutputPolicyError("output policy contains an unknown setting")
     if type(data.get("version")) is not int or data["version"] != 1:
         raise OutputPolicyError("output policy must declare version = 1")
@@ -265,6 +288,23 @@ def load_output_policy() -> OutputPolicy:
             raise OutputPolicyError("model timeout must be greater than 0 and at most 300 seconds")
         model = ModelPolicy(bundle, float(timeout))
     scopes = _pseudonym_scopes(data.get("pseudonymization", {}))
+    activity = _table(data.get("activity", {}), {"enabled", "path"})
+    enabled = activity.get("enabled", False)
+    if type(enabled) is not bool:
+        raise OutputPolicyError("activity enabled must be true or false")
+    log_path = None
+    if "path" in activity:
+        raw = activity["path"]
+        if not isinstance(raw, str) or not raw or "\x00" in raw:
+            raise OutputPolicyError("activity path must be a nonempty absolute file path")
+        try:
+            log_path = Path(raw).expanduser()
+        except RuntimeError:
+            raise OutputPolicyError("activity path cannot be expanded") from None
+        if not log_path.is_absolute() or ".." in log_path.parts or not log_path.name:
+            raise OutputPolicyError("activity path must be absolute without parent traversal")
+    if enabled and log_path is None:
+        raise OutputPolicyError("enabled activity logging requires an explicit path")
     workflow = _table(
         data.get("workflow", {}), {"on_findings", "transform_strategy", "pseudonym_scope"}
     )
@@ -293,4 +333,5 @@ def load_output_policy() -> OutputPolicy:
         selected_scope,
         scopes,
         model,
+        ActivityPolicy(enabled, log_path),
     )

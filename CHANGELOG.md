@@ -8,6 +8,8 @@ First release: an MCP server that checks a file for personal data and credential
 
 ### Added
 
+- Optional, disabled-by-default activity logging records only UTC time, fixed tool name, success/error, and per-type counts in an explicitly initialized private POSIX file. Owner configuration, 0700/0600 permissions, no-follow/link checks, a 10 MiB cap, and nonblocking writer locks protect storage. No contents, paths, values, hashes, keys, scope names, or exception details are logged. Logging failures preserve tool outcomes and display a warning; activity assets are refused as data, and setup/status plus retention/uninstall guidance are documented.
+
 - `datafog_check_text` checks already-composed outbound drafts using existing detector/model selection, exact allowlists, and overlap handling. It returns counts, character spans, and advisory findings guidance without echoing, transforming, saving, or sending the draft. Drafts are bounded to 1 MiB of UTF-8 bytes; malformed arguments and processing failures withhold draft values. A clean result never grants permission to send, and transformed drafts must be revised and rechecked separately.
 
 - Explicit `datafog-mcp model install` setup downloads the pinned DataFog PII EN 65M native release, verifies archive/manifest/file integrity and MCP/Core/platform compatibility, and supports offline installation without overwriting existing bundles. Owner-configured model inference adds PERSON and STREET_ADDRESS across scans and all copy tools with local-only transport, inference deadlines, allowlists, and content-free responses. Missing or failed requested model support refuses the operation with setup guidance; no tool performs downloads or silently falls back to Core-only results.

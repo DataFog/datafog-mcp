@@ -13,6 +13,7 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from datafog_mcp import __version__
+from datafog_mcp.activity import CURRENT_POLICY, MAX_LOG_BYTES, ActivityLoggingMiddleware
 from datafog_mcp.config import (
     DEFAULT_ENTITIES,
     MODEL_ENTITIES,
@@ -54,7 +55,7 @@ mcp = FastMCP(
     name="datafog",
     version=__version__,
     mask_error_details=True,
-    middleware=[DraftValidationMiddleware()],
+    middleware=[ActivityLoggingMiddleware(), DraftValidationMiddleware()],
     instructions=(
         "Local PII and credential detection and transformation. Scans "
         "files on disk for emails, phone numbers, SSNs, credit card "
@@ -141,13 +142,26 @@ def _config_from(entity_types: list[str] | None, current: OutputPolicy) -> ScanC
 def _request_policy() -> OutputPolicy:
     """Load and validate the owner's settings before accessing file contents."""
     try:
-        return load_output_policy()
+        return CURRENT_POLICY.get() or load_output_policy()
     except OutputPolicyError as exc:
         raise ToolError(str(exc)) from None
 
 
 def _protect_private_resources(path: Path, current: OutputPolicy) -> None:
-    """Refuse configured model bundles and key files (including key aliases)."""
+    """Refuse configured activity/model assets and key files, including aliases."""
+    if current.activity.path is not None:
+        resolved = path.resolve()
+        directory = current.activity.path.parent.resolve()
+        if resolved == directory or directory in resolved.parents:
+            raise ToolError("Configured activity storage cannot be processed as data.")
+        try:
+            for ancestor in resolved.parents:
+                if ancestor.samefile(current.activity.path.parent):
+                    raise ToolError("Configured activity storage cannot be processed as data.")
+            if path.samefile(current.activity.path):
+                raise ToolError("Configured activity storage cannot be processed as data.")
+        except (FileNotFoundError, NotADirectoryError):
+            pass
     if current.model is not None:
         resolved = path.resolve()
         bundle = current.model.bundle_directory
@@ -215,6 +229,12 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
             "entity_types": sorted(MODEL_ENTITIES),
             "verified": False,
             "setup_command": "datafog-mcp model install",
+        }
+        result["activity_logging"] = {
+            "enabled": current.activity.enabled,
+            "storage": "private_posix_file",
+            "max_bytes": MAX_LOG_BYTES,
+            "verified": False,
         }
         result["pseudonymization_scopes"] = list(current.pseudonym_scopes)
         if current.pseudonym_scope is not None:
