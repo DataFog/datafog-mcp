@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, TextIO, cast
 
 import pytest
 
@@ -12,9 +17,11 @@ from datafog_mcp.paths import ALLOWED_ROOTS_VAR
 from datafog_mcp.reader import (
     FileExists,
     FileTooLarge,
+    InsufficientSpace,
     NotARegularFile,
     NotText,
     PathNotFound,
+    WriteError,
     read_text_file,
     write_text_file,
 )
@@ -263,13 +270,13 @@ def test_umask_can_still_narrow_the_copy(tmp_path: Path) -> None:
     assert _mode(written) == 0o600
 
 
-def test_failed_write_leaves_no_file(tmp_path: Path) -> None:
+def test_failed_write_leaves_no_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     A write that fails after the file is created leaves nothing behind.
 
     Otherwise an empty or truncated copy would sit at the output path looking
-    like a finished result. A lone surrogate cannot be encoded as UTF-8, so the
-    write fails after the destination already exists.
+    like a finished result. Simulate disk space running out after a successful
+    preflight and a partial write.
 
     Parameters:
       tmp_path: Holds the source and the attempted copy.
@@ -277,8 +284,80 @@ def test_failed_write_leaves_no_file(tmp_path: Path) -> None:
     source = tmp_path / "in.csv"
     source.write_text("x", encoding="utf-8")
     destination = tmp_path / "out.csv"
+    fdopen = os.fdopen
 
-    with pytest.raises(UnicodeEncodeError):
-        write_text_file(destination, "partial\ud800", beside=source)
+    @contextmanager
+    def failing_writer(descriptor: int, *args: Any, **kwargs: Any) -> Iterator[SimpleNamespace]:
+        with cast(TextIO, fdopen(descriptor, *args, **kwargs)) as handle:
 
+            def write(text: str) -> None:
+                handle.write(text[:3])
+                handle.flush()
+                raise OSError(errno.ENOSPC, "no space left on device")
+
+            yield SimpleNamespace(write=write)
+
+    monkeypatch.setattr("datafog_mcp.reader.os.fdopen", failing_writer)
+
+    with pytest.raises(OSError, match="no space left"):
+        write_text_file(destination, "partial payload", beside=source)
+
+    assert not destination.exists()
+    assert source.read_text(encoding="utf-8") == "x"
+
+
+@pytest.mark.parametrize("available", [0, 1, 5])
+def test_insufficient_space_refuses_copy_before_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, available: int
+) -> None:
+    """Count UTF-8 bytes of the transformed output, not source size or characters."""
+    source = tmp_path / "input.txt"
+    source.write_text("x", encoding="utf-8")
+    destination = tmp_path / "output.txt"
+    monkeypatch.setattr(
+        "datafog_mcp.reader.shutil.disk_usage", lambda _: SimpleNamespace(free=available)
+    )
+
+    with pytest.raises(InsufficientSpace, match="needs 6 bytes"):
+        write_text_file(destination, "ééé", beside=source)
+
+    assert not destination.exists()
+    assert source.read_text(encoding="utf-8") == "x"
+
+
+def test_free_space_check_uses_destination_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An exact-fit copy succeeds using the destination directory's free space."""
+    source = tmp_path / "input.txt"
+    source.write_text("x", encoding="utf-8")
+    checked: list[Path] = []
+
+    def disk_usage(path: Path) -> SimpleNamespace:
+        checked.append(path)
+        return SimpleNamespace(free=6)
+
+    monkeypatch.setattr("datafog_mcp.reader.shutil.disk_usage", disk_usage)
+    destination = write_text_file(tmp_path / "output.txt", "ééé", beside=source)
+
+    assert checked == [tmp_path.resolve()]
+    assert destination.read_bytes() == "ééé".encode()
+
+
+def test_space_check_failure_refuses_copy_without_exposing_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unavailable capacity information fails closed with a safe message."""
+    source = tmp_path / "input.txt"
+    source.write_text("x", encoding="utf-8")
+    destination = tmp_path / "output.txt"
+
+    def disk_usage(_: Path) -> SimpleNamespace:
+        raise OSError("sensitive@example.com")
+
+    monkeypatch.setattr("datafog_mcp.reader.shutil.disk_usage", disk_usage)
+    with pytest.raises(WriteError, match="cannot check free space") as excinfo:
+        write_text_file(destination, "payload", beside=source)
+
+    assert "sensitive@example.com" not in str(excinfo.value)
     assert not destination.exists()

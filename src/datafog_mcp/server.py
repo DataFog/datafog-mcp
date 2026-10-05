@@ -19,7 +19,8 @@ from datafog_mcp.findings import (
     render,
     render_transformation,
 )
-from datafog_mcp.paths import PathNotAllowed
+from datafog_mcp.paths import PathNotAllowed, resolve_output
+from datafog_mcp.policy import OutputPolicyError, load_output_policy
 from datafog_mcp.reader import (
     ReadError,
     WriteError,
@@ -206,7 +207,7 @@ async def _transform_to_file(
 
     Parameters:
       path: The file to read.
-      output_path: Where to write, or None for a sibling of the input.
+      output_path: Destination path within the policy's directory, or None for the default name.
       entity_types: The types to transform, or None for the default.
       strategy: One of redact, mask, or remove.
     Returns:
@@ -219,13 +220,23 @@ async def _transform_to_file(
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
+    try:
+        copy_policy = load_output_policy()
+    except OutputPolicyError as exc:
+        raise ToolError(str(exc)) from None
+
     source = content.path
     suffix = _OUTPUT_SUFFIXES[strategy]
     destination = (
         Path(output_path)
         if output_path
-        else source.with_name(f"{source.stem}_{suffix}{source.suffix}")
+        else (copy_policy.directory or source.parent) / f"{source.stem}_{suffix}{source.suffix}"
     )
+
+    try:
+        destination = resolve_output(str(destination), source, copy_policy)
+    except PathNotAllowed as exc:
+        raise ToolError(str(exc)) from None
 
     found = await asyncio.to_thread(scan, content.text)
     kept = [item for item in found if config.keeps(item.entity_type)]
@@ -233,7 +244,7 @@ async def _transform_to_file(
     result = await asyncio.to_thread(transform, content.text, kept, transform_config(strategy))
 
     try:
-        written = write_text_file(destination, result.text, beside=source)
+        written = write_text_file(destination, result.text, beside=source, copy_policy=copy_policy)
     except (WriteError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
@@ -267,8 +278,8 @@ async def datafog_redact(
 
     Parameters:
       path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
-      output_path: Where to write. Defaults to a sibling of the input with a
-      _redacted suffix.
+      output_path: Destination path within the owner-configured output directory,
+      or beside the input if none is configured. Defaults to name_redacted.ext.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
     Returns:
@@ -304,8 +315,8 @@ async def datafog_mask(
 
     Parameters:
       path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
-      output_path: Where to write. Defaults to a sibling of the input with
-      a _masked suffix.
+      output_path: Destination path within the owner-configured output directory,
+      or beside the input if none is configured. Defaults to name_masked.ext.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
     Returns:
@@ -342,8 +353,8 @@ async def datafog_remove(
 
     Parameters:
       path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
-      output_path: Where to write. Defaults to a sibling of the input with
-      a _removed suffix.
+      output_path: Destination path within the owner-configured output directory,
+      or beside the input if none is configured. Defaults to name_removed.ext.
       entity_types: The types to delete. Defaults to the same types as
       datafog_scan; an empty list is refused.
     Returns:

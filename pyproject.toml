@@ -22,6 +22,7 @@ dependencies = [
     "fastmcp>=3,<4",
     "datafog-core>=0.4.1,<0.5",
     "pydantic>=2,<3",
+    "tomli>=2; python_version < '3.11'",
 ]
 
 [dependency-groups]

@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from .policy import OutputPolicy, OutputPolicyError, load_output_policy
+
 ROOTS_FILE = Path.home() / ".config" / "datafog" / "allowed_roots"
 
 ROOTS_TEMPLATE = """\
@@ -239,16 +241,17 @@ def resolve_input(path: str) -> Path:
     return _check(Path(path).expanduser().resolve())
 
 
-def resolve_output(path: str, beside: Path) -> Path:
+def resolve_output(path: str, beside: Path, copy_policy: OutputPolicy | None = None) -> Path:
     """
     Resolve a path the server may write.
 
-    Outputs are confined to the directory of the input they derive from. The
-    configuration directory is refused outright too.
+    Outputs are confined to the owner-configured directory, or the input's
+    directory when none is configured. Configuration directories are refused.
 
     Parameters:
         path: The requested path.
         beside: The resolved input path whose directory bounds the output.
+        copy_policy: A request's policy snapshot, or None to load it now.
     Returns:
         The resolved path, when policy permits it.
     """
@@ -256,9 +259,18 @@ def resolve_output(path: str, beside: Path) -> Path:
     destination = raw_path.parent.resolve() / raw_path.name
     resolved = _check(destination)
 
+    if copy_policy is None:
+        try:
+            copy_policy = load_output_policy()
+        except OutputPolicyError as exc:
+            raise PolicyError(str(exc)) from None
+
     if _same_directory(resolved.parent, ROOTS_FILE.parent):
         raise PathNotAllowed(f"{resolved} is inside the server's configuration directory")
-    if not _same_directory(resolved.parent, beside.parent):
+    expected = copy_policy.directory or beside.parent
+    if not _same_directory(resolved.parent, expected):
+        if copy_policy.directory is not None:
+            raise PathNotAllowed("copy must be in the configured output directory")
         raise PathNotAllowed(f"{resolved} must be in the same directory as {beside}")
 
     return resolved

@@ -49,9 +49,11 @@ Every tool takes a path and returns a path. None returns file contents or matche
 | `datafog_mask` | Covers each value character for character, preserving length | `name_masked.ext` |
 | `datafog_remove` | Deletes each value outright, leaving no marker | `name_removed.ext` |
 
-The write tools create a sibling of the input and never modify the original. An existing file at the destination is never overwritten. `output_path` can name the file but not move it to another directory.
+The write tools never modify the original. By default they create a sibling of the input. You can choose a fixed output directory in `policy.toml` during setup (see below). An existing file at the destination is never overwritten. `output_path` can choose a filename within that directory, but cannot select another allowed root or a subdirectory.
 
 A copy gets the input's permissions, minus any execute bits, so a file only you can read produces a copy only you can read. A copy can still hold values the detectors missed, so it is never made more readable than its source. If a write fails partway, the incomplete copy is deleted.
+
+Before creating a copy, the server checks the destination filesystem has space for the transformed UTF-8 output. Insufficient space, or an unavailable free-space check, refuses the write. This checks available capacity at that moment; it does not reserve space or account for disk quotas. A later write failure still removes the incomplete copy.
 
 Detected by default:
 
@@ -97,6 +99,28 @@ Always refused, even inside a root: `.ssh`, `.gnupg`, `.aws`, `.kube`, `gcloud`.
 
 A refused path returns a tool error naming the roots in force, or why the policy can't be used.
 
+### Choose where copies go
+
+During setup, create the directory where you want cleaned copies and include both the input directory and output directory in your allowed roots. Then edit the copy policy:
+
+```bash
+datafog-mcp policy --edit  # create a private template and open it in $EDITOR
+datafog-mcp policy        # show the configured copy destination
+```
+
+The file is `~/.config/datafog/policy.toml`:
+
+```toml
+version = 1
+
+[output]
+directory = "~/Documents/datafog-copies"
+```
+
+The directory must already exist and be an absolute path or start with `~`. The server creates files directly inside it, retaining the usual `_redacted`, `_masked`, or `_removed` names. It never creates directories automatically. Setting this destination grants no additional access: allowed roots, credential-directory denials, and the configuration-directory write refusal still apply. If two inputs produce the same output name, use an explicit destination path inside the configured directory; existing copies are never overwritten.
+
+Edits take effect on the next write request. A missing policy file uses sibling copies. A valid file containing just `version = 1` also explicitly selects sibling copies. An empty, malformed, unreadable, or unsupported policy refuses writes rather than falling back. This version supports only `version` and `[output].directory`; broader workflow settings will be added separately. Scans do not depend on the copy policy.
+
 ## Uninstall
 
 Remove the registration first. If the program goes first, Claude Code fails to start `datafog` in every session (`ENOENT`) until the registration is removed too.
@@ -110,16 +134,19 @@ Then remove the configuration, if you created it with `datafog-mcp roots --edit`
 
 ```bash
 rm ~/.config/datafog/allowed_roots
-rmdir ~/.config/datafog
 ```
+
+The optional `~/.config/datafog/policy.toml` stores your copy destination. Keep it for reinstalling, or remove it separately if you want to discard that setting. Removing it does not delete any copies.
+
+If you remove both configuration files, `rmdir ~/.config/datafog` removes the now-empty directory.
 
 If you set `DATAFOG_MCP_ALLOWED_ROOTS` in your shell profile, remove it there.
 
-That removes everything the server itself created. It keeps no cache, log, or data directory of its own.
+The server keeps no cache, log, or data directory of its own.
 
 Two things remain, on purpose:
 
-- **Copies the tools wrote.** These are your files, saved beside their originals with `_redacted`, `_masked`, or `_removed` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
+- **Copies the tools wrote.** These are your files, saved beside their originals or in your configured output directory with `_redacted`, `_masked`, or `_removed` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
 
   ```bash
   find ~ \( -name '*_redacted.*' -o -name '*_masked.*' -o -name '*_removed.*' \) -type f
