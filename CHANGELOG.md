@@ -13,9 +13,7 @@ First release: an MCP server that checks a file for personal data and credential
 - Detection by the [datafog-core](https://github.com/DataFog/datafog-core) engine, on this machine: email addresses, SSNs, credit card numbers, labeled US routing numbers and NPIs, GitHub and Stripe API keys, bearer tokens in Authorization headers, JWTs, PostgreSQL connection strings with a password, and complete PEM private-key blocks. Dates, ZIP codes, phone numbers, and IP addresses on request.
 - Allowed roots confine every read and write to configured directories. `datafog-mcp roots` shows and edits them. Credential directories such as `.ssh` are always refused.
 
-### Changed
-
-- `DATE`, `ZIP_CODE`, and `PHONE` are now opt-in for scans and all write tools, reducing matches on operational timestamps and numeric IDs. Select them explicitly through `entity_types`; an explicit list replaces the defaults. Detection coverage and advisory-use limitations are documented more precisely.
+- `DATE`, `ZIP_CODE`, and `PHONE` are opt-in for scans and all write tools, reducing matches on operational timestamps and numeric IDs. Select them explicitly through `entity_types`; an explicit list replaces the defaults. Detection coverage and advisory-use limitations are documented more precisely.
 
 ### Security
 
