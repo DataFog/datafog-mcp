@@ -26,7 +26,15 @@ from fastmcp.client.transports import StdioTransport
 import datafog_mcp
 
 SECRET = "jack.smith@example.com"
-TOOLS = {"datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove"}
+TOOLS = {
+    "datafog_policy",
+    "datafog_scan",
+    "datafog_redact",
+    "datafog_mask",
+    "datafog_remove",
+    "datafog_pseudonymize",
+    "datafog_check_text",
+}
 
 
 def _require(condition: bool, message: str) -> None:
@@ -97,6 +105,15 @@ async def _check_session(server: str, workdir: Path, expected: str) -> None:
         _require((scan.structured_content or {}).get("counts", {}).get("EMAIL") == 1, "EMAIL")
         _require(SECRET not in str(scan.structured_content), "scan returned the value")
         _require(SECRET not in str(scan.content), "scan content returned the value")
+
+        draft = await client.call_tool("datafog_check_text", {"text": f"Contact {SECRET}"})
+        _require((draft.structured_content or {}).get("counts") == {"EMAIL": 1}, "draft EMAIL")
+        _require(SECRET not in str(draft.content), "draft check returned the value")
+        _require(SECRET not in str(draft.structured_content), "draft data returned the value")
+        _require(
+            (draft.structured_content or {}).get("policy", {}).get("advisory") is True,
+            "draft policy is not advisory",
+        )
 
         redact = await client.call_tool("datafog_redact", {"path": str(source)})
         copy = Path((redact.structured_content or {})["output_path"])

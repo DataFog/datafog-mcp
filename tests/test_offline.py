@@ -16,8 +16,10 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
+from fastmcp.exceptions import ToolError
 
 # Loaded by the child interpreter at startup. Records egress attempts to the
 # file named by DATAFOG_EGRESS_LOG and refuses them. Loopback is allowed,
@@ -77,6 +79,7 @@ def test_serving_makes_no_network_requests(tmp_path: Path) -> None:
 
     egress_log = tmp_path / "egress.log"
     marker = tmp_path / "hook_loaded"
+    stderr = tmp_path / "server-stderr.log"
     source = tmp_path / "contacts.csv"
     source.write_text("name,email\nJack,jack.smith@example.com\n", encoding="utf-8")
 
@@ -90,12 +93,21 @@ def test_serving_makes_no_network_requests(tmp_path: Path) -> None:
         "DATAFOG_HOOK_MARKER": str(marker),
         "FASTMCP_HOME": str(tmp_path / "fastmcp-home"),
     }
-    transport = StdioTransport(sys.executable, ["-m", "datafog_mcp"], env=env)
+    transport = StdioTransport(sys.executable, ["-m", "datafog_mcp"], env=env, log_file=stderr)
 
     async def session() -> None:
         async with Client(transport) as client:
             await client.call_tool("datafog_scan", {"path": str(source)})
             await client.call_tool("datafog_redact", {"path": str(source)})
+            draft = "OUTBOUND_SENTINEL private-person@example.com"
+            result = await client.call_tool("datafog_check_text", {"text": draft})
+            assert (result.structured_content or {})["counts"] == {"EMAIL": 1}
+            assert "OUTBOUND_SENTINEL" not in str(result.content)
+            with pytest.raises(ToolError) as caught:
+                await client.call_tool(
+                    "datafog_check_text", {"text": draft, "entity_types": [draft]}
+                )
+            assert draft not in str(caught.value)
 
     asyncio.run(session())
 
@@ -104,3 +116,5 @@ def test_serving_makes_no_network_requests(tmp_path: Path) -> None:
 
     attempts = egress_log.read_text(encoding="utf-8") if egress_log.exists() else ""
     assert attempts == ""
+    assert "OUTBOUND_SENTINEL" not in stderr.read_text(encoding="utf-8")
+    assert "private-person@example.com" not in stderr.read_text(encoding="utf-8")
