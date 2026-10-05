@@ -49,6 +49,8 @@ jobs:
         run: uv run pytest --cov=src/datafog_mcp --cov-report=xml
 
       - name: Upload coverage
+        # Upload/bootstrap failures also respect the existing non-blocking policy.
+        continue-on-error: true
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
