@@ -34,9 +34,11 @@ dev = [
     "mypy>=1.11.0",
     "pyright>=1.1.398",
     "pre-commit>=3.8.0",
+    "tomli>=2; python_version < '3.11'",
     "coverage>=7.6.0",
 ]
 ci = [
+    "tomli>=2; python_version < '3.11'",
     "ruff>=0.8.0",
     "pytest>=8.3.0",
     "pytest-cov>=6.0.0",
