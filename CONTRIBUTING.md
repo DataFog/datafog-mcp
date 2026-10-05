@@ -5,7 +5,6 @@ Install the development dependencies and hooks before making changes:
 ```sh
 uv sync --frozen --group dev
 uv run pre-commit install
-git fetch origin main
 ```
 
 ## Changelog policy
@@ -20,16 +19,12 @@ file format belongs under `Added`. Keep the release marked `Unreleased` until th
 release is ready. The existing release workflow separately checks the version and
 dated release heading when publishing a tag.
 
-The hook checks the branch's changes from its merge base with `origin/main`,
-including staged changes and excluding unstaged edits. An entry committed earlier
-on the same branch counts; later commits do not need duplicate entries. Stage the
-entry before committing. For a different PR base, fetch it and run:
+Changelog enforcement runs only in CI after you push. CI checks the complete PR
+against its actual target branch, including when PRs are stacked on other branches.
+An entry committed earlier in the PR counts; later commits do not need duplicate
+entries. The local pre-commit hooks still run their existing quality checks.
 
-```sh
-CHANGELOG_BASE=origin/other-branch uv run pre-commit run changelog --all-files
-```
-
-CI checks the complete PR against its actual base. The checker detects a text
+The changelog checker detects a text
 addition, not whether that text accurately describes the change; reviewers must
 check its substance. Missing base refs fail the check instead of silently passing.
 
@@ -44,15 +39,8 @@ Changelog exemption: Adds regression tests without changing runtime behavior.
 ```
 
 Both the label and a nonempty reason are required. Reviewers should confirm the
-reason; the label alone is insufficient. If these changes cannot pass the local
-hook, bypass only that hook for the commit:
-
-```sh
-SKIP=changelog git commit
-```
-
-This local bypass does not exempt the PR in CI. CI reruns when the PR description
-or labels change. Repository administrators should require the `Changelog policy`
+reason; the label alone is insufficient. CI reruns when the PR description or
+labels change. Repository administrators should require the `Changelog policy`
 status check in branch protection so failed checks prevent merging.
 
 Run the regular quality checks before opening a PR:

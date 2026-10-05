@@ -1,4 +1,4 @@
-"""Require a changelog addition across a branch, including staged changes locally."""
+"""Require a changelog addition or explicit exemption across a complete PR."""
 
 import argparse
 import json
@@ -31,15 +31,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default=os.environ.get("CHANGELOG_BASE", "origin/main"))
     parser.add_argument(
-        "--staged", action="store_true", help="Include the index, exclude unstaged edits"
-    )
-    parser.add_argument(
         "--event", help="GitHub pull_request event JSON; enables labeled exemptions"
     )
     args = parser.parse_args()
     try:
         base = git("merge-base", args.base, "HEAD").strip()
-        comparison = ["--cached", base] if args.staged else [base, "HEAD"]
+        comparison = [base, "HEAD"]
         if not git("diff", "--name-only", *comparison).strip():
             print("No changes to check.")
             return 0

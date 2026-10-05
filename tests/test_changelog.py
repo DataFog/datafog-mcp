@@ -1,4 +1,4 @@
-"""Exercise the contributor policy against real branch and index changes."""
+"""Exercise the CI contributor policy against real PR branch changes."""
 
 import json
 import subprocess
@@ -41,14 +41,14 @@ def stage_behavior(repo: Path) -> None:
     git(repo, "add", "behavior.txt")
 
 
-def test_unstaged_entry_does_not_cover_staged_behavior(repo: Path) -> None:
+def test_uncommitted_entry_does_not_cover_committed_behavior(repo: Path) -> None:
     stage_behavior(repo)
+    git(repo, "commit", "-m", "behavior without entry")
     (repo / "CHANGELOG.md").write_text("# Changelog\n\nChanged output behavior.\n")
-    assert check(repo, "--staged").returncode == 1
+    assert check(repo).returncode == 1
     git(repo, "add", "CHANGELOG.md")
-    assert check(repo, "--staged").returncode == 0
-    # CI sees only committed files.
-    git(repo, "commit", "-m", "behavior with entry")
+    assert check(repo).returncode == 1
+    git(repo, "commit", "-m", "entry")
     assert check(repo).returncode == 0
 
 
@@ -57,7 +57,6 @@ def test_previous_commit_entry_covers_later_commits(repo: Path) -> None:
     git(repo, "add", "CHANGELOG.md")
     git(repo, "commit", "-m", "entry")
     stage_behavior(repo)
-    assert check(repo, "--staged").returncode == 0
     git(repo, "commit", "-m", "implementation")
     assert check(repo).returncode == 0
 
@@ -67,12 +66,14 @@ def test_deletion_heading_and_blank_additions_do_not_count(repo: Path, entry: st
     stage_behavior(repo)
     (repo / "CHANGELOG.md").write_text(entry)
     git(repo, "add", "CHANGELOG.md")
-    assert check(repo, "--staged").returncode == 1
+    git(repo, "commit", "-m", "change without substantive entry")
+    assert check(repo).returncode == 1
 
 
 def test_renaming_changelog_does_not_count(repo: Path) -> None:
     git(repo, "mv", "CHANGELOG.md", "history.md")
-    assert check(repo, "--staged").returncode == 1
+    git(repo, "commit", "-m", "rename changelog")
+    assert check(repo).returncode == 1
 
 
 @pytest.mark.parametrize(
