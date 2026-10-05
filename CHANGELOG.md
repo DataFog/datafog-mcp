@@ -8,6 +8,8 @@ First release: an MCP server that checks a file for personal data and credential
 
 ### Added
 
+- `datafog_pseudonymize` writes consistently keyed copies for cross-file linkage using owner-configured scopes. Explicit `datafog-mcp keys create SCOPE` setup supports OS credential storage and an explicitly selected owner-only POSIX file backend. Missing/unavailable keys refuse the operation without generation, replacement, or backend fallback; configured key files and aliases are refused as data. Policy discovery and workflow guidance expose scope names without key material. Pseudonymization does not make data anonymous.
+
 - `datafog_scan` reports the entity types, per-type counts, and character offsets found in a file. A value two detectors both match is reported once, as the type the write tools would replace it with.
 - `datafog_redact`, `datafog_mask`, and `datafog_remove` write a transformed copy beside the original by default, or in an owner-configured output directory. The original is never modified.
 - Detection by the [datafog-core](https://github.com/DataFog/datafog-core) engine, on this machine: email addresses, phone numbers, SSNs, credit card numbers, dates, ZIP codes, US routing numbers, NPIs, API keys, bearer tokens, JWTs, credentials embedded in URIs, and PEM private keys. IP addresses on request.

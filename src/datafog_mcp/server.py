@@ -7,20 +7,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import fastmcp
-from datafog_core import scan, transform
+from datafog_core import PrivacyManager, scan, transform
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from datafog_mcp import __version__
-from datafog_mcp.config import SUPPORTED_ENTITIES, ScanConfig, Strategy, transform_config
+from datafog_mcp.config import SUPPORTED_ENTITIES, ScanConfig, transform_config
 from datafog_mcp.findings import (
     Mode,
     render,
     render_transformation,
 )
+from datafog_mcp.keys import KeyStorageError, LocalKeyProvider
 from datafog_mcp.paths import PathNotAllowed, allowed_roots, resolve_input, resolve_output
-from datafog_mcp.policy import OutputPolicy, OutputPolicyError, load_output_policy
+from datafog_mcp.policy import OutputPolicy, OutputPolicyError, WriteStrategy, load_output_policy
 from datafog_mcp.reader import (
     ReadError,
     WriteError,
@@ -59,10 +60,11 @@ mcp = FastMCP(
     ),
 )
 
-_OUTPUT_SUFFIXES: dict[Strategy, str] = {
+_OUTPUT_SUFFIXES: dict[WriteStrategy, str] = {
     "redact": "redacted",
     "mask": "masked",
     "remove": "removed",
+    "pseudonymize": "pseudonymized",
 }
 
 
@@ -119,6 +121,29 @@ def _request_policy() -> OutputPolicy:
         raise ToolError(str(exc)) from None
 
 
+def _protect_key_file(path: Path, current: OutputPolicy) -> None:
+    """Refuse configured key files, including symbolic and hard-link aliases."""
+    for scope in current.pseudonym_scopes.values():
+        if scope.key_file is None:
+            continue
+        try:
+            if path.resolve() == scope.key_file.resolve() or path.samefile(scope.key_file):
+                raise ToolError(
+                    "Configured pseudonymization key files cannot be processed as data."
+                )
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+
+
+def _checked_input(path: str, current: OutputPolicy) -> str:
+    try:
+        resolved = resolve_input(path)
+    except PathNotAllowed as exc:
+        raise ToolError(str(exc)) from None
+    _protect_key_file(resolved, current)
+    return str(resolved)
+
+
 @mcp.tool
 async def datafog_policy(path: str | None = None) -> dict[str, Any]:
     """Discover owner policy without returning exact allowlist values or scanning a file.
@@ -155,7 +180,11 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
                 "transform_strategy": current.transform_strategy,
             },
         }
+        result["pseudonymization_scopes"] = list(current.pseudonym_scopes)
+        if current.pseudonym_scope is not None:
+            result["workflow"]["pseudonym_scope"] = current.pseudonym_scope
         if resolved is not None:
+            _protect_key_file(resolved, current)
             result["scan_before_read"] = current.in_scope(resolved)
         return result
 
@@ -238,7 +267,7 @@ async def _scan_file(
     current = _request_policy()
 
     try:
-        content = read_text_file(path, config.max_bytes)
+        content = read_text_file(_checked_input(path, current), config.max_bytes)
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
@@ -270,6 +299,8 @@ async def _scan_file(
     }
     if resolved.transformations and current.on_findings == "transform":
         response["policy"]["transform_strategy"] = current.transform_strategy
+        if current.pseudonym_scope is not None:
+            response["policy"]["pseudonym_scope"] = current.pseudonym_scope
     return response
 
 
@@ -277,7 +308,8 @@ async def _transform_to_file(
     path: str,
     output_path: str | None,
     entity_types: list[str] | None,
-    strategy: Strategy,
+    strategy: WriteStrategy,
+    scope: str | None = None,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with detected values transformed.
@@ -286,15 +318,27 @@ async def _transform_to_file(
       path: The file to read.
       output_path: Destination path within the policy's directory, or None for the default name.
       entity_types: The types to transform, or None for the default.
-      strategy: One of redact, mask, or remove.
+      strategy: Redact, mask, remove, or keyed pseudonymize.
+      scope: Required configured scope name for pseudonymize.
     Returns:
       The tool response describing what was replaced.
     """
     config = _config_from(entity_types)
     copy_policy = _request_policy()
+    selected = copy_policy.pseudonym_scopes.get(scope) if scope is not None else None
+    provider = None
+    if strategy == "pseudonymize":
+        if selected is None:
+            raise ToolError("Pseudonymization scope is not configured.")
+        provider = LocalKeyProvider(selected)
+        try:
+            # Resolve even for clean inputs, then reuse this snapshot for Core.
+            await provider.resolve_key(selected.key_ref, selected.key_version)
+        except KeyStorageError as exc:
+            raise ToolError(str(exc)) from None
 
     try:
-        content = read_text_file(path, config.max_bytes)
+        content = read_text_file(_checked_input(path, copy_policy), config.max_bytes)
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
@@ -308,6 +352,7 @@ async def _transform_to_file(
 
     try:
         destination = resolve_output(str(destination), source, copy_policy)
+        _protect_key_file(destination, copy_policy)
     except PathNotAllowed as exc:
         raise ToolError(str(exc)) from None
 
@@ -321,7 +366,21 @@ async def _transform_to_file(
         )
     ]
 
-    result = await asyncio.to_thread(transform, content.text, kept, transform_config(strategy))
+    if strategy == "pseudonymize":
+        assert selected is not None and provider is not None
+        result = await PrivacyManager(provider=provider).transform(
+            content.text,
+            kept,
+            {
+                "default": {
+                    "strategy": "pseudonymize",
+                    "key_ref": selected.key_ref,
+                    "key_version": selected.key_version,
+                }
+            },
+        )
+    else:
+        result = await asyncio.to_thread(transform, content.text, kept, transform_config(strategy))
 
     try:
         written = write_text_file(destination, result.text, beside=source, copy_policy=copy_policy)
@@ -447,6 +506,40 @@ async def datafog_remove(
             entity_types,
             strategy="remove",
         )
+
+
+@mcp.tool
+async def datafog_pseudonymize(
+    path: str,
+    scope: str,
+    output_path: str | None = None,
+    entity_types: EntitySelection = None,
+) -> dict[str, Any]:
+    """Write a copy with deterministic pseudonyms using an explicitly configured scope.
+
+    Use when analysis needs consistent linkage across files. Matching exact values
+    of the same entity type with the same key yields the same pseudonym. Different
+    scope names do not separate outputs if they reference the same key. Changes
+    in case, spacing, or detector boundaries may change linkage. Pseudonymization
+    does not make data anonymous; other fields and repeated values may identify people.
+
+    The owner must configure a scope and run `datafog-mcp keys create SCOPE`
+    locally first. Missing or unavailable keys refuse the operation, even on a
+    clean input: keys are never generated, replaced, or stored through MCP tools.
+    File contents, matched values, keys, and content digests are never returned.
+    Exact allowlists and copy-directory restrictions apply; existing copies and
+    the source are never overwritten. Read the resulting copy, not the original.
+
+    Parameters:
+      path: UTF-8 input file within allowed roots, up to the configured size limit.
+      scope: Owner-configured pseudonymization scope name; never a raw key.
+      output_path: Optional new filename within the owner's copy directory.
+      entity_types: Entity types to transform, or None for the default set.
+    Returns:
+      Input/output paths, strategy, entity count, and per-type counts.
+    """
+    with _contained():
+        return await _transform_to_file(path, output_path, entity_types, "pseudonymize", scope)
 
 
 def run_server() -> None:

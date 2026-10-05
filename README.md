@@ -49,6 +49,7 @@ File tools take a path and return scan metadata or a copy path. `datafog_policy`
 | `datafog_redact` | Replaces each value with a label naming its kind, `[EMAIL]` | `name_redacted.ext` |
 | `datafog_mask` | Covers each value character for character, preserving length | `name_masked.ext` |
 | `datafog_remove` | Deletes each value outright, leaving no marker | `name_removed.ext` |
+| `datafog_pseudonymize` | Replaces values consistently using an explicitly configured scope key | `name_pseudonymized.ext` |
 
 The write tools never modify the original. By default they create a sibling of the input. You can choose a fixed output directory in `policy.toml` during setup (see below). An existing file at the destination is never overwritten. `output_path` can choose a filename within that directory, but cannot select another allowed root or a subdirectory.
 
@@ -118,7 +119,7 @@ version = 1
 directory = "~/Documents/datafog-copies"
 ```
 
-The directory must already exist and be an absolute path or start with `~`. The server creates files directly inside it, retaining the usual `_redacted`, `_masked`, or `_removed` names. It never creates directories automatically. Setting this destination grants no additional access: allowed roots, credential-directory denials, and the configuration-directory write refusal still apply. If two inputs produce the same output name, use an explicit destination path inside the configured directory; existing copies are never overwritten.
+The directory must already exist and be an absolute path or start with `~`. The server creates files directly inside it, retaining the usual `_redacted`, `_masked`, `_removed`, or `_pseudonymized` names. It never creates directories automatically. Setting this destination grants no additional access: allowed roots, credential-directory denials, and the configuration-directory write refusal still apply. If two inputs produce the same output name, use an explicit destination path inside the configured directory; existing copies are never overwritten.
 
 Edits take effect on the next request. A missing policy file uses sibling copies. A valid file containing just `version = 1` also explicitly selects sibling copies. An empty, malformed, unreadable, or unsupported policy refuses scans and writes rather than falling back.
 
@@ -149,9 +150,57 @@ Exact allowlists suppress a complete detected value only for its configured enti
 
 The agent can call `datafog_policy` to discover scope, workflow settings, copy destination, and allowlist counts. With an optional `path`, it checks roots and reports `scan_before_read`; it does not read or scan the file. A scope match is a scheduling instruction, never evidence that a file is clean.
 
-Completed scans return advisory `policy.action`: `ask` (default), `transform`, or `stop` when non-allowlisted findings remain; `proceed` when none remain under the selected detectors and allowlists. `transform` includes the suggested strategy (`redact`, `mask`, or `remove`). Scans never automatically write a copy. Explicit write tools retain the strategy requested by the caller. These actions guide the agent; the server cannot prevent access through another tool. Failed scans or invalid policies never authorize a fallback read of the original.
+Completed scans return advisory `policy.action`: `ask` (default), `transform`, or `stop` when non-allowlisted findings remain; `proceed` when none remain under the selected detectors and allowlists. `transform` includes the suggested strategy (`redact`, `mask`, `remove`, or `pseudonymize`). With `pseudonymize`, it also includes the configured `pseudonym_scope`. Scans never automatically write a copy. Explicit write tools retain the strategy requested by the caller. These actions guide the agent; the server cannot prevent access through another tool. Failed scans or invalid policies never authorize a fallback read of the original.
 
 `datafog-mcp policy` shows the same settings to the owner, including counts instead of exact allowlist values. The parser rejects unknown sections/settings so configuration mistakes cannot silently disable a safeguard. Each request uses one immutable policy snapshot; edits apply to subsequent requests.
+
+### Consistent pseudonyms and local key setup
+
+Use `datafog_pseudonymize(path, scope)` when analysis needs to link repeated values across files. Core creates deterministic keyed pseudonyms: the same exact value and entity type, with the same key, produces the same replacement. Separate keys separate linkage; different scope names alone do not. Changes in case, formatting, or detector boundaries may affect matches. Pseudonymization preserves linkage and does **not** make data anonymous.
+
+Configure a scope in `~/.config/datafog/policy.toml`. Keys never belong in the policy, tool arguments, or environment variables:
+
+```toml
+version = 1
+
+[pseudonymization.scopes.customers]
+key_ref = "customer-analysis"
+key_version = "1"
+backend = "keyring"
+```
+
+Then explicitly create its key locally:
+
+```bash
+datafog-mcp keys create customers
+```
+
+The default backend accepts only OS credential stores supported by `keyring`: macOS Keychain, Windows Credential Manager, Linux Secret Service/libsecret, or KWallet. The OS store must be configured and unlocked. Plaintext, fallback, and chained backends are refused; explicitly select a supported OS backend if your keyring setup normally uses a chain. An unavailable or locked store fails instead of switching to a file. Setup never intentionally replaces an existing key and prints no key material. Concurrent OS-store setup commands use a local `.key-setup.lock` directory beside the policy; a stale lock must be inspected and removed locally before retrying.
+
+For a headless **POSIX** system, explicitly select file storage instead:
+
+```toml
+[pseudonymization.scopes.customers]
+key_ref = "customer-analysis"
+key_version = "1"
+backend = "file"
+key_file = "/home/service/.config/datafog/keys/customers.key"
+```
+
+Create the private parent directory yourself (`mkdir -p` and `chmod 700`), then run the same `keys create customers` command. The path must be absolute (or start with `~`), without `..` or symlinks in any component. Use the actual canonical path if a directory such as `/tmp` is a symlink on your OS. Setup exclusively creates an owner-only `0600` file containing a base64-encoded 256-bit random key; this backend is protected by filesystem permissions, not encryption at rest. Retrieval requires a regular file owned by the current user, exactly `0600`, with one hard link. Symlinks, hard links, malformed keys, and unavailable storage are refused. File storage is not supported on Windows.
+
+Missing keys fail even when the input has no findings. MCP tools never create keys, rotate them, or choose a different backend. Each request resolves one key snapshot. Configured key files and their symbolic/hard-link aliases are refused as data inputs and copy destinations. Copies retain the existing roots, fixed-directory, no-overwrite, permission, and disk-space safeguards; exact allowlists still apply. Tool responses expose paths and counts, never keys, matched values, pseudonyms, or content digests.
+
+To recommend this strategy after a scan, add:
+
+```toml
+[workflow]
+on_findings = "transform"
+transform_strategy = "pseudonymize"
+pseudonym_scope = "customers"
+```
+
+`datafog_policy` and `datafog-mcp policy` expose configured scope names without retrieving keys. A workflow naming an absent scope is invalid. Preserve the key, reference/version, and policy securely if future outputs must remain joinable. Deleting or replacing a key breaks linkage with earlier outputs; no key export, recovery, or rotation command is provided in this release.
 
 ## Uninstall
 
@@ -168,7 +217,7 @@ Then remove the configuration, if you created it with `datafog-mcp roots --edit`
 rm ~/.config/datafog/allowed_roots
 ```
 
-The optional `~/.config/datafog/policy.toml` stores your copy destination, exact allowlists, routine scanning scope, and workflow guidance. Keep it for reinstalling, or remove it separately if you want to discard those settings. Removing it does not delete any copies.
+The optional `~/.config/datafog/policy.toml` stores your copy destination, exact allowlists, routine scanning scope, and workflow guidance. Keep it for reinstalling, or remove it separately if you want to discard those settings. Removing it does not delete any copies or pseudonymization keys.
 
 If you remove both configuration files, `rmdir ~/.config/datafog` removes the now-empty directory.
 
@@ -176,13 +225,15 @@ If you set `DATAFOG_MCP_ALLOWED_ROOTS` in your shell profile, remove it there.
 
 The server keeps no cache, log, or data directory of its own.
 
-Two things remain, on purpose:
+These remain, on purpose:
 
-- **Copies the tools wrote.** These are your files, saved beside their originals or in your configured output directory with `_redacted`, `_masked`, or `_removed` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
+- **Copies the tools wrote.** These are your files, saved beside their originals or in your configured output directory with `_redacted`, `_masked`, `_removed`, or `_pseudonymized` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
 
   ```bash
-  find ~ \( -name '*_redacted.*' -o -name '*_masked.*' -o -name '*_removed.*' \) -type f
+  find ~ \( -name '*_redacted.*' -o -name '*_masked.*' -o -name '*_removed.*' -o -name '*_pseudonymized.*' \) -type f
   ```
+
+- **Pseudonymization keys.** Uninstalling does not delete keys from the OS credential store or your explicitly configured private files. Preserve them for future joins, or delete them manually only when you intend to lose that linkage. A key file in the configuration directory will also prevent `rmdir` from removing it.
 
 - **Claude Code's logs about the server.** Claude Code records its connections to each MCP server and keeps those records after the server is gone. They're under `~/.cache/claude-cli-nodejs/*/mcp-logs-datafog/` on Linux and `~/Library/Caches/claude-cli-nodejs/*/mcp-logs-datafog/` on macOS, and you can delete them.
 

@@ -42,6 +42,13 @@ def _build_parser() -> argparse.ArgumentParser:
     copies = sub.add_parser("policy", help="Show owner scanning, copy, and workflow settings")
     copies.add_argument("--edit", action="store_true", help="Open policy.toml in $EDITOR")
 
+    keys = sub.add_parser("keys", help="Explicit local pseudonymization key setup")
+    commands = keys.add_subparsers(dest="key_command", required=True)
+    create = commands.add_parser(
+        "create", help="Create a configured scope key without replacing it"
+    )
+    create.add_argument("scope", help="Scope name configured in policy.toml")
+
     return parser
 
 
@@ -94,6 +101,20 @@ def main() -> None:
     """
     args = _build_parser().parse_args()
 
+    if args.command == "keys":
+        from .keys import KeyStorageError, generate_scope_key
+
+        try:
+            current = load_output_policy()
+            scope = current.pseudonym_scopes.get(args.scope)
+            if scope is None:
+                raise KeyStorageError("Pseudonymization scope is not configured.")
+            generate_scope_key(scope)
+        except (OutputPolicyError, KeyStorageError) as exc:
+            raise SystemExit(f"datafog-mcp: {exc}") from None
+        print("Pseudonymization key created. Preserve it to keep future outputs joinable.")
+        return
+
     if args.command == "policy":
         if args.edit:
             _edit_policy()
@@ -112,6 +133,9 @@ def main() -> None:
             print("Extensions: " + (", ".join(current.scope_extensions) or "all"))
             print(f"On findings: {current.on_findings} (advisory)")
             print(f"Suggested transformation: {current.transform_strategy}")
+            print("Pseudonymization scopes: " + (", ".join(current.pseudonym_scopes) or "none"))
+            if current.pseudonym_scope:
+                print(f"Suggested pseudonym scope: {current.pseudonym_scope}")
             print(
                 "Exact allowlist counts: "
                 + ", ".join(f"{kind}={len(values)}" for kind, values in current.allow_exact.items())
