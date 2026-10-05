@@ -44,9 +44,12 @@ mcp = FastMCP(
     mask_error_details=True,
     instructions=(
         "Local PII and credential detection and transformation. Scans "
-        "files on disk for emails, phone numbers, SSNs, credit card "
-        "numbers, dates, ZIP codes, bank routing numbers, NPIs, API "
-        "keys, tokens, and private keys, and can write a transformed "
+        "files on disk for emails, SSNs, credit card numbers, labeled "
+        "bank routing numbers and NPIs, GitHub and Stripe API keys, "
+        "bearer tokens, JWTs, PostgreSQL connection strings with a password, "
+        "and PEM private keys. Dates, ZIP codes, phone numbers, and IP "
+        "addresses require an explicit entity_types selection. Plain-text "
+        "names and street addresses are not detected. It can write a transformed "
         "copy. File contents are processed on this machine and never "
         "included in tool responses."
     ),
@@ -135,19 +138,29 @@ async def datafog_scan(
     are binary and are not parsed. A refusal is not a clean result: the file
     was not checked.
 
-    It also detects common credentials - API keys, bearer tokens, JWTs,
-    credentials embedded in URIs, and PEM private keys - but is not a
-    substitute for a dedicated secret scanner. A clean result means none of
-    these detectors matched, not that the file holds no secrets.
+    It also detects some credentials: GitHub tokens and Stripe secret and
+    restricted keys, tokens in Authorization: Bearer headers, JWTs, PostgreSQL
+    connection strings with a password, and complete PEM private-key blocks.
+    Other providers' keys, such as AWS, and other URI schemes, such as MySQL
+    or Redis, are not detected. It is not a substitute for a dedicated secret
+    scanner. A clean result means none of the selected detectors matched,
+    not that the file holds no sensitive data or secrets. Plain-text names
+    and street addresses are not detected.
+
+    Routing numbers and NPIs are found only after a label such as "Routing
+    number:" or "NPI:". A bare value, such as one in a CSV column, can be
+    missed or reported as another type.
 
     Parameters:
       path: The path of the file to scan.
       mode: What to return. Only "findings" is available: the type and
       offsets of each detected entity.
       entity_types: The types to look for. Defaults to API_KEY, BEARER_TOKEN,
-      CREDENTIAL_URI, CREDIT_CARD, DATE, EMAIL, JWT, NPI, PHONE, PRIVATE_KEY,
-      SSN, US_ROUTING_NUMBER, and ZIP_CODE. IP_ADDRESS is available on
-      request. Omit for the defaults; an empty list is refused.
+      CREDENTIAL_URI, CREDIT_CARD, EMAIL, JWT, NPI, PRIVATE_KEY, SSN, and
+      US_ROUTING_NUMBER. DATE, ZIP_CODE, PHONE, and IP_ADDRESS are available
+      on request. An explicit list replaces the defaults; to add a type,
+      include both the default types you want and that type. Omit for the
+      defaults; an empty list is refused.
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
       detected entities.

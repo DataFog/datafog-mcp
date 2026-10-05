@@ -10,6 +10,8 @@ Detection runs locally on the [datafog-core](https://github.com/DataFog/datafog-
 
 The guarantee holds when a tool fails, too. An unexpected error returns only its type, such as `datafog failed with RuntimeError`, and its details are kept out of both the response and the server's log.
 
+These checks are advisory and reduce exposure; they do not de-identify data or enforce an agent's file access. They complement enterprise data-loss-prevention (DLP) and endpoint controls rather than replace them. Plain-text names and street addresses are not detected by this installation.
+
 What responses do carry:
 
 - **Paths.** Every response names the files it read and wrote, and errors name the path they refused. A filename like `jane_doe_lab_results.csv` identifies a person on its own.
@@ -38,6 +40,8 @@ claude mcp add --scope user datafog -- ~/.local/bin/datafog-mcp
 
 Bare `datafog-mcp` runs the server over stdio; `datafog-mcp serve` is the same thing spelled out.
 
+The client must be able to launch this executable and access files on this machine. A cloud-hosted agent cannot reach this local stdio server directly. The Claude Code instructions above do not establish support for other clients; those need separate integration testing.
+
 ## Tools
 
 Every tool takes a path and returns a path. None returns file contents or matched values.
@@ -55,13 +59,23 @@ A copy gets the input's permissions, minus any execute bits, so a file only you 
 
 Detected by default:
 
-- **Personal data** — `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `DATE`, `ZIP_CODE`
+- **Personal data** — `EMAIL`, `SSN`, `CREDIT_CARD`
 - **Financial and health identifiers** — `US_ROUTING_NUMBER`, `NPI`
 - **Credentials** — `API_KEY`, `BEARER_TOKEN`, `JWT`, `CREDENTIAL_URI`, `PRIVATE_KEY`
 
-`IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set, or omit it for the defaults. Any other type is refused, and so is an empty list, which would select nothing.
+`DATE`, `ZIP_CODE`, `PHONE`, and `IP_ADDRESS` are available but off by default. Dates, ZIP codes, and phone numbers can match operational timestamps or numeric IDs, so enable them when that coverage is needed. A default scan does not check these types, and a default write leaves their values unchanged unless another selected detector also matches them.
 
-Credential detection covers common formats. It is not a substitute for a dedicated secret scanner, and a clean result is not proof a file holds no secrets.
+Pass `entity_types` to choose the types to check or transform, or omit it for the defaults. An explicit list **replaces** the defaults; it does not add to them. For example, `{"path": "/absolute/path/export.csv", "entity_types": ["EMAIL", "PHONE", "DATE", "ZIP_CODE"]}` checks only those four types. Include every default type you still want when opting into another type. Unsupported types and an empty list are refused.
+
+Some types are narrower than their names suggest:
+
+- **`US_ROUTING_NUMBER` and `NPI`** are found only after a label, such as `Routing number:` or `NPI:`. A bare value, such as one in a CSV column named `npi`, can be missed or reported as another type.
+- **`API_KEY`** covers GitHub tokens and Stripe secret and restricted keys. Keys from other providers, such as AWS, are not detected.
+- **`BEARER_TOKEN`** is the token in an `Authorization: Bearer` header.
+- **`CREDENTIAL_URI`** covers PostgreSQL connection strings that include a password (`postgres://` or `postgresql://`). Other schemes, such as MySQL, Redis, or MongoDB, are not detected.
+- **`PRIVATE_KEY`** is a complete PEM private-key block. Public keys and certificates are not reported.
+
+Credential detection is not a substitute for a dedicated secret scanner. A clean result means none of the selected detectors matched; it is not proof a file holds no sensitive data or secrets.
 
 ## Supported files
 
