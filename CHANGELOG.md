@@ -8,6 +8,8 @@ First release: an MCP server that checks a file for personal data and credential
 
 ### Added
 
+- Explicit `datafog-mcp model install` setup downloads the pinned DataFog PII EN 65M native release, verifies archive/manifest/file integrity and MCP/Core/platform compatibility, and supports offline installation without overwriting existing bundles. Owner-configured model inference adds PERSON and STREET_ADDRESS across scans and all copy tools with local-only transport, inference deadlines, allowlists, and content-free responses. Missing or failed requested model support refuses the operation with setup guidance; no tool performs downloads or silently falls back to Core-only results.
+
 - `datafog_pseudonymize` writes consistently keyed copies for cross-file linkage using owner-configured scopes. Explicit `datafog-mcp keys create SCOPE` setup supports OS credential storage and an explicitly selected owner-only POSIX file backend. Missing/unavailable keys refuse the operation without generation, replacement, or backend fallback; configured key files and aliases are refused as data. Policy discovery and workflow guidance expose scope names without key material. Pseudonymization does not make data anonymous.
 
 - `datafog_scan` reports the entity types, per-type counts, and character offsets found in a file. A value two detectors both match is reported once, as the type the write tools would replace it with.
@@ -27,5 +29,5 @@ First release: an MCP server that checks a file for personal data and credential
 ### Known limitations
 
 - Reads UTF-8 text files up to 1 MiB. Other encodings, binary formats such as XLSX and PDF, and larger files are refused.
-- Detection is pattern-based. It reduces exposure but does not de-identify, names are not detected in plain text, and a clean result is not proof a file holds no sensitive data.
+- Core detection is pattern-based. Detection reduces exposure but does not de-identify; names require the separately installed optional model, and a clean result is not proof a file holds no sensitive data.
 - An agent can still open a file directly instead of using these tools.

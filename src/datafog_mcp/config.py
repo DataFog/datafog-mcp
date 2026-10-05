@@ -32,7 +32,9 @@ def _text_scan_entities() -> frozenset[str]:
     )
 
 
-SUPPORTED_ENTITIES: frozenset[str] = _text_scan_entities()
+MODEL_ENTITIES = frozenset({"PERSON", "STREET_ADDRESS"})
+CORE_ENTITIES = _text_scan_entities()
+SUPPORTED_ENTITIES: frozenset[str] = CORE_ENTITIES | MODEL_ENTITIES
 
 # Which types are on by default is a product decision, so this stays
 # explicit rather than following the engine's list. IP_ADDRESS is
