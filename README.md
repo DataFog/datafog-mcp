@@ -145,6 +145,8 @@ For another MCP client, remove the `datafog` entry from that client's MCP config
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the changelog policy and exemption process.
+
 ```bash
 uv sync --group dev
 uv run pre-commit install
