@@ -1,150 +1,204 @@
 # datafog-mcp
 
-An MCP server that lets an AI agent check a file for personally identifiable information (PII), and produce a cleaned copy, without the file's contents ever appearing in the tool's response.
+Local file checks and transformations for MCP clients, powered by [datafog-core](https://github.com/DataFog/datafog-core). Agents can inspect entity counts and locations without receiving matched values, then create a transformed copy before analysis or sharing.
 
-Detection runs locally on the [datafog-core](https://github.com/DataFog/datafog-core) engine.
+This branch locks Core **0.4.2** (`>=0.4.2,<0.5`). The optional local name/address model is a separate experimental artifact; installing Core does not install or enable that model.
 
-**What stays on the machine.** File contents are read and processed locally, and the server makes no network requests while running. FastMCP's update check is switched off, and its OpenTelemetry hooks do nothing unless you install an OpenTelemetry SDK and configure an exporter yourself. Tool responses are a different matter: they go into the agent's context, and the agent sends its context to its model provider. That is why responses carry no file contents or matched values. Installing the server downloads packages, which is separate from running it.
+## Install and connect
 
-**What this does and does not protect.** No tool response contains file contents or matched values, so "is this file sensitive" can be answered without the answer carrying the sensitive parts. That is the whole of the guarantee. Note that the agent can still open the file directly, and sometimes will.
-
-The guarantee holds when a tool fails, too. An unexpected error returns only its type, such as `datafog failed with RuntimeError`, and its details are kept out of both the response and the server's log.
-
-What responses do carry:
-
-- **Paths.** Every response names the files it read and wrote, and errors name the path they refused. A filename like `jane_doe_lab_results.csv` identifies a person on its own.
-- **Metadata.** Entity types, per-type counts, and character offsets. These reveal that a file holds, say, two email addresses at known positions, without revealing the addresses.
-- **Allowed roots.** A refused path returns the configured roots, which name directories on your machine.
-
-## Requirements
-
-- Python 3.10+
-- [uv](https://docs.astral.sh/uv/)
-
-## Install
-
-Not yet on PyPI. From a checkout:
+Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/). From this checkout:
 
 ```bash
 uv tool install .
-```
-
-That puts `datafog-mcp` on your `PATH`. Register it with your MCP client.
-For Claude Code:
-
-```bash
 claude mcp add --scope user datafog -- ~/.local/bin/datafog-mcp
 ```
 
-Bare `datafog-mcp` runs the server over stdio; `datafog-mcp serve` is the same thing spelled out.
+Register the executable with another MCP client using its stdio-server configuration. `datafog-mcp` and `datafog-mcp serve` both start the server. Installing dependencies downloads packages; serving does not download models or check for updates.
+
+## Start with the policy
+
+The intended agent flow is:
+
+1. Call `datafog_get_policy` before a new file workflow to learn scan scope and preferences.
+2. Scan applicable files before reading them into model context.
+3. Follow the advisory action when findings are present, as defined below.
+4. If using a transformed copy, open that copy separately for analysis.
+
+- **ask:** pause for user permission before reading originals or sending sensitive content.
+- **transform:** use the configured strategy and pseudonymization scope to create a copy; read or share only the successfully created copy.
+- **stop:** stop the affected workflow and explain findings using metadata only.
+- **proceed:** continue under policy and existing user authorization. This does not independently authorize sending or publishing.
+
+If scanning or transformation fails—including a timeout or unsupported format—report the limitation. Do not open the original with another tool to investigate or bypass the failure. Apply this rule individually to failed files in a batch.
+
+Before sending an already-composed draft, use `datafog_check_text` and follow the same findings policy. It does not transform or send text: if transformation is required, revise and recheck the draft, or create a transformed source-file copy using the configured strategy. Do not read an unscanned file into context just to pass its contents to this tool. The host may retain its arguments.
+
+These instructions are advisory. DataFog cannot intercept or block a shell command, another MCP server, or a direct file read. A refusal means the file was not checked. A clean result means the selected detectors found nothing actionable, not that no sensitive data exists.
 
 ## Tools
 
-Every tool takes a path and returns a path. None returns file contents or matched values.
+| Tool | Behavior |
+|---|---|
+| `datafog_get_policy` | Exposes advisory scope, workflow preferences, limits, and available pseudonymization scopes, without allowlist values or keys |
+| `datafog_scan` | Scans one file; reports counts and paginated findings with source locations |
+| `datafog_scan_batch` | Scans selected files/folders, with per-file success/error and counts; subfolders require `recursive=true` |
+| `datafog_check_text` | Checks an outbound draft already in context; returns metadata, does not send or transform text |
+| `datafog_redact` | Writes type labels such as `[EMAIL]` |
+| `datafog_mask` | Covers matched characters; CSV quoting can change serialized file length |
+| `datafog_remove` | Deletes matched values, retaining empty CSV cells |
+| `datafog_pseudonymize` | Writes consistent opaque HMAC pseudonyms using a required named scope |
 
-| Tool | What it does | Output |
-|---|---|---|
-| `datafog_scan` | Reports entity types, counts, and character offsets | — |
-| `datafog_redact` | Replaces each value with a label naming its kind, `[EMAIL]` | `name_redacted.ext` |
-| `datafog_mask` | Covers each value character for character, preserving length | `name_masked.ext` |
-| `datafog_remove` | Deletes each value outright, leaving no marker | `name_removed.ext` |
+All write tools preserve the original and refuse existing destinations. Output precedence is explicit `output_path`, `[output].directory`, then a sibling named with `_redacted`, `_masked`, `_removed`, or `_pseudonymized`. The destination directory must exist within allowed roots. Copies retain source permissions minus execute bits; partial writes are cleaned up. Copies are not deleted automatically.
 
-The write tools create a sibling of the input and never modify the original. An existing file at the destination is never overwritten. `output_path` can name the file but not move it to another directory.
+Batch scans are sequential, deduplicate resolved paths, do not follow directory symlinks, and create no copies. File symlinks still undergo allowed-root validation. A per-file failure does not make other files disappear from the result. Exceeding the configured batch count refuses the whole selection before scanning.
 
-A copy gets the input's permissions, minus any execute bits, so a file only you can read produces a copy only you can read. A copy can still hold values the detectors missed, so it is never made more readable than its source. If a write fails partway, the incomplete copy is deleted.
+### Coverage and known limits
 
-Detected by default:
+Default deterministic types: `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `US_ROUTING_NUMBER`, `NPI`, `API_KEY`, `BEARER_TOKEN`, `JWT`, `CREDENTIAL_URI`, and `PRIVATE_KEY`.
 
-- **Personal data** — `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `DATE`, `ZIP_CODE`
-- **Financial and health identifiers** — `US_ROUTING_NUMBER`, `NPI`
-- **Credentials** — `API_KEY`, `BEARER_TOKEN`, `JWT`, `CREDENTIAL_URI`, `PRIVATE_KEY`
+`DATE`, `ZIP_CODE`, and `IP_ADDRESS` are **opt-in**. Pass `entity_types` to select them; an empty list is invalid. For example, `entity_types=["EMAIL", "DATE"]` selects just those types.
 
-`IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set, or omit it for the defaults. Any other type is refused, and so is an empty list, which would select nothing.
+- Core's API-key coverage is GitHub/Stripe formats, not arbitrary credentials such as every AWS key.
+- Credential URIs cover password-bearing PostgreSQL formats, not every URI scheme.
+- NPIs and routing numbers require recognizable labels. CSV headers supply context; an arbitrary identifier column is not automatically understood.
+- Dates can be operational timestamps, and five-digit IDs can look like ZIP codes. This is why those types are not default selections.
+- Names and street addresses require the separately configured model below. Its first-/last-name spans map to `PERSON`, not necessarily one combined full-name span.
+- Email boundaries use Core 0.4.2 source context for `.env` assignments and standard SQL quoted strings. Plain-text scanning retains legitimate apostrophes and equals signs in email local parts; it can include assignment prefixes or quotes when no source format is selected. SQL backslash escapes, dollar quoting, and encoded email characters are not interpreted. See [the Core boundary policy](https://docs.datafog.ai/guides/email-boundaries).
+- Redaction labels do not preserve distinct identities. Pseudonyms preserve exact-value equality, not person identity; two addresses for one person remain different values.
 
-Credential detection covers common formats. It is not a substitute for a dedicated secret scanner, and a clean result is not proof a file holds no secrets.
+We test named fixtures and regression behavior; these are not general accuracy guarantees. Review outputs for your data format and use case.
 
-## Supported files
+## Files, CSVs, and finding pages
 
-UTF-8 text, up to 1 MiB (1,048,576 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. Detection reads the file as flat text, so it finds values anywhere in it but has no notion of columns or fields.
+UTF-8 text files are accepted up to **100,000,000 bytes (100 MB, decimal)** by default. Text tool arguments default to 1,048,576 bytes independently. Files are fully checked; results are paginated instead of silently truncated. Large-file model latency and memory are separate release qualifications, not guaranteed by accepting a size limit.
 
-Refused with an error, never scanned:
+XLSX, PDF, DOCX, images, archives, and non-UTF-8 encodings are refused. Export or convert them outside DataFog first. A UTF-8 BOM is retained.
 
-- **Other encodings.** UTF-16, UTF-32, Latin-1, and so on. Convert to UTF-8 first. A UTF-8 byte-order mark, as Excel writes, is fine and is kept in the copy.
-- **Binary files.** XLSX, PDF, DOCX, images, and archives such as ZIP are not parsed. Export to CSV or text first.
-- **Anything over 1 MiB.**
+`.csv` and `.tsv` use explicit comma/tab parsing, with double quotes and doubled-quote escaping. The first record is a header by default; use `has_header=false` for headerless inputs. `input_format="text"` explicitly treats an irregular export as plain text. There is no silent fallback after a CSV error.
 
-A refusal is not a clean result. It means the file was not checked.
+`.env`, `.env.*`, and filenames ending in `.env` automatically select environment assignment boundaries; `.sql` selects standard SQL quoted-string boundaries. Use `input_format="env"` or `input_format="sql"` for other filenames, and `input_format="text"` to override automatic selection. Scan and all copy transformations use the same format. These modes preserve assignment keys/delimiters and enclosing quotes for supported email syntax; they do not parse every SQL dialect or change other entity detectors. SQL findings describe raw source spans, including doubled-apostrophe escapes, rather than decoded database values. Outbound text checks and CSV/TSV cells retain ordinary text email matching.
 
-## Where it may look
+CSV transformations preserve headers, record/column counts, and untouched cell values. Quoted commas, embedded newlines, escaped quotes, Unicode, empty cells, duplicate headers, and CRLF are supported. Malformed quoting, inconsistent column counts, and blank physical records are refused. Other dialects are not guessed.
 
-Every read and write is checked against a set of allowed root directories. With no roots file and no override, the allowed root is your home directory.
+Findings use zero-based, end-exclusive Unicode code-point offsets into the **original input**, including BOM and CRLF. Text locations also include one-based `line` and `character_column`. CSV findings add one-based `record` (excluding header), `column`, and optional `field_name`. Duplicate or empty headers are disambiguated by column index. Headers themselves are preserved and not selected for transformation.
 
-```bash
-datafog-mcp roots          # show the roots in force and where they came from
-datafog-mcp roots --edit   # open the roots file in $EDITOR
+For `datafog_scan` and `datafog_check_text`, inspect `complete`. If false, repeat with `offset=next_offset` and the previous `content_digest`, retaining the same input/options. Counts describe the whole input, while `findings` contains one page. Changed content or detection settings invalidate continuation. Each continuation rescans the input; pagination bounds response size, not total scan memory or work.
+
+## Local configuration
+
+The optional `~/.config/datafog/policy.toml` reloads at the next tool call. A batch uses one policy snapshot. `DATAFOG_POLICY_PATH` can select another absolute file path. Missing policy means defaults; malformed or unknown settings fail clearly without echoing policy contents.
+
+Example (create the output directory separately and ensure it is allowed):
+
+```toml
+version = 1
+
+[allow.exact]
+EMAIL = ["test@example.com"] # Exact and case-sensitive; applies to every tool
+
+[output]
+directory = "~/Documents/datafog-output"
+
+[workflow]
+on_findings = "ask" # ask | transform | proceed | stop
+transform_strategy = "redact" # redact | mask | remove | pseudonymize
+
+[scope]
+folders = ["~/Downloads", "~/Documents/customer-data"]
+extensions = [".csv", ".txt", ".log"]
+
+[logging]
+enabled = false
+
+[limits]
+max_file_bytes = 100000000
+max_text_bytes = 1048576
+max_findings = 1000
+max_batch_files = 1000
 ```
 
-The file is `~/.config/datafog/allowed_roots`, one absolute path per line, with `~` expanded. Edits take effect immediately, so there's no need to restart or re-register. `roots --edit` creates the file starting from `~`, so creating it changes nothing until you narrow it.
+Omitted/empty scope filters mean all data files, with no automatic Git or project exemption. Scope defines advisory scan-before-read behavior; an explicit scan outside that scope still runs if access is permitted. Allowlisted matches remain in output copies and are excluded from actionable counts. Responses indicate policy and allowlist application without listing allowed values.
 
-`DATAFOG_MCP_ALLOWED_ROOTS` (colon-separated) overrides the file whenever it is set, for installs that shouldn't be widened by editing a file.
+For `on_findings="transform"`, the agent is told to use the configured strategy. Pseudonymization additionally requires `scope="customer_analysis"` in `[workflow]` and a matching scope definition below. The server returns guidance; it does not automatically read, send, or transform a file after a scan.
 
-A configured policy never falls back to the default:
+### Filesystem access
 
-- **An empty policy refuses every path.** A file that lists no directories, or a variable set to an empty value, locks the server down rather than reverting to your home directory. Delete the file or unset the variable to return to the default.
-- **A malformed policy refuses every path and says why.** A relative path, an unreadable file, or something other than a regular file at the file's location is an error, not an absence. Relative paths are refused because they would resolve against whichever directory your MCP client launched the server from.
+Allowed roots remain separate from workflow policy:
 
-Always refused, even inside a root: `.ssh`, `.gnupg`, `.aws`, `.kube`, `gcloud`.
+```bash
+datafog-mcp roots
+datafog-mcp roots --edit
+```
 
-A refused path returns a tool error naming the roots in force, or why the policy can't be used.
+`~/.config/datafog/allowed_roots` contains one absolute path per line, with `~` expanded. Without this file or an override, the root is the user's home. `DATAFOG_MCP_ALLOWED_ROOTS` (platform path-separator separated) overrides it. Empty configuration refuses all paths; malformed configuration fails without falling back. Roots-file edits take effect on subsequent operations.
+
+Both reads and writes enforce roots and resolve symlinks. Credential directories `.ssh`, `.gnupg`, `.aws`, `.kube`, and `gcloud` remain blocked. DataFog configuration/key/activity files and configured model assets cannot be treated as ordinary data inputs or outputs. Selecting an output directory never grants access to it.
+
+### Pseudonymization keys
+
+Add a named scope to the policy:
+
+```toml
+[pseudonymization.scopes.customer_analysis]
+key_ref = "customer-analysis"
+key_version = "1"
+backend = "keyring" # Default: OS credential store
+```
+
+Then explicitly create its key:
+
+```bash
+datafog-mcp keys create customer_analysis
+```
+
+Call `datafog_pseudonymize` with `path` and `scope="customer_analysis"`. Core 0.4.1 uses HMAC-SHA-256; identical exact values and the same secret produce consistent opaque pseudonyms across files and server restarts. Changing case, spacing, detection boundaries, or the key changes the result. This is one-way, not decryptable tokenization.
+
+Desktop storage uses supported macOS/Windows/Linux credential-store backends via `keyring`; a locked/unavailable store fails explicitly. There is no automatic plaintext fallback. For POSIX headless environments choose `backend="file"` and an absolute `key_file` path in that scope. Create its parent directory first. Key files must be owner-controlled, mode 0600, without symlinks or hardlinks. The file backend is not supported on Windows.
+
+Keys never belong in TOML or tool arguments. Setup does not replace existing keys, and tool calls never generate missing ones. Back up and transfer keys securely if joins must survive machine changes. Copying policy alone is insufficient. For explicit rotation, use a new reference/version (and a different file path for file storage), retain old keys if needed, and expect new outputs to stop joining old outputs. Unrelated scopes should have separate keys; scope names alone do not alter HMAC behavior.
+
+### Optional experimental name/address model
+
+A compatible local native bundle can be selected with:
+
+```toml
+[model]
+bundle_directory = "/absolute/path/to/native-bundle"
+timeout_seconds = 30
+```
+
+The bundle and runtime must be installed separately before serving. This enables `PERSON` and `STREET_ADDRESS` alongside the deterministic detectors. Without it, explicit model-type requests fail rather than falsely reporting clean results. Configured inference failures also fail explicitly; there is no silent downgrade. Model weights are not automatically fetched, and this configuration is not a claim that the checkpoint passed release acceptance. See [validation coverage](docs/validation/current-coverage.md) for qualification boundaries.
+
+### Activity logging and privacy
+
+Set `[logging].enabled=true` to write a local JSONL log (default `~/.local/state/datafog/activity.jsonl`; optional absolute `path`). Records contain time, operation, outcome, and entity counts, never paths, input contents, or matched values. The log is created with private permissions. At 10 MB or on an unavailable/unsafe destination, logging stops and successful tool responses report `activity_log="unavailable"`; operations do not overwrite/rotate the log. Users manage retention locally. A log establishes which DataFog operations ran, not whether every agent read was checked.
+
+Tool responses include paths, entity metadata, and CSV header names. Those can themselves be identifying; CSV headers are source metadata, not guaranteed nonsensitive text. Direct text-check arguments are already in agent context and may be retained by the host. DataFog cannot control host logs or external telemetry exporters a user separately installs. Unexpected exception details are withheld from tool responses and server error logs.
+
+## Development and validation
+
+```bash
+uv sync --group dev
+uv run pre-commit install
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
+uv run pyright
+uv run pytest
+```
+
+CI runs these checks on Python 3.10–3.12, including deterministic product contracts and a real offline stdio session. Ordinary tests isolate policy files and use temporary credentials; they must not touch personal keychains or model downloads. A separate [GLiNER fixture comparison](docs/validation/gliner-fixtures.md) downloads pinned public weights in an isolated GitHub Actions job; its diagnostic metrics do not qualify the shipped local detector. See [current validation coverage](docs/validation/current-coverage.md) and the [implementation plan](docs/plans/user-flow-implementation.md).
 
 ## Uninstall
 
-Remove the registration first. If the program goes first, Claude Code fails to start `datafog` in every session (`ENOENT`) until the registration is removed too.
+Remove the MCP registration before uninstalling the executable:
 
 ```bash
 claude mcp remove datafog --scope user
 uv tool uninstall datafog-mcp
 ```
 
-Then remove the configuration, if you created it with `datafog-mcp roots --edit`:
-
-```bash
-rm ~/.config/datafog/allowed_roots
-rmdir ~/.config/datafog
-```
-
-If you set `DATAFOG_MCP_ALLOWED_ROOTS` in your shell profile, remove it there.
-
-That removes everything the server itself created. It keeps no cache, log, or data directory of its own.
-
-Two things remain, on purpose:
-
-- **Copies the tools wrote.** These are your files, saved beside their originals with `_redacted`, `_masked`, or `_removed` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
-
-  ```bash
-  find ~ \( -name '*_redacted.*' -o -name '*_masked.*' -o -name '*_removed.*' \) -type f
-  ```
-
-- **Claude Code's logs about the server.** Claude Code records its connections to each MCP server and keeps those records after the server is gone. They're under `~/.cache/claude-cli-nodejs/*/mcp-logs-datafog/` on Linux and `~/Library/Caches/claude-cli-nodejs/*/mcp-logs-datafog/` on macOS, and you can delete them.
-
-For another MCP client, remove the `datafog` entry from that client's MCP configuration in place of the `claude mcp remove` step.
-
-## Development
-
-```bash
-uv sync --group dev
-uv run pre-commit install
-```
-
-```bash
-uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pyright && uv run pytest
-```
-
-Runtime dependencies are audited for known advisories weekly, on every push to `main`, and on any pull request that changes them. To run the same audit of the locked dependencies locally:
-
-```bash
-uv export --frozen --no-dev --no-emit-project -o locked.txt && uvx pip-audit --disable-pip -r locked.txt
-```
+For another client, remove its server configuration. Policy, roots, optional logs, keys, model artifacts, and transformed copies are retained for deliberate user cleanup. Do not delete keys needed to reproduce pseudonyms or join future exports. Remove environment overrides from shell/client configuration if no longer needed.
 
 ## License
 

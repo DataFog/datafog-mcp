@@ -36,12 +36,13 @@ def _call(**arguments: Any) -> dict[str, Any]:
 
 
 def test_finds_profile_identifiers() -> None:
-    """The header block's email, phone, and postal code are found."""
+    """The metadata block's email and phone are found; dates/ZIPs are opt-in."""
     result = _call(path=str(DATA))
 
     assert result["counts"]["EMAIL"] == 1
     assert result["counts"]["PHONE"] == 1
-    assert result["counts"]["ZIP_CODE"] == 1
+    assert "ZIP_CODE" not in result["counts"]
+    assert "DATE" not in result["counts"]
     assert result["entity_count"] == sum(result["counts"].values())
 
 
@@ -94,9 +95,10 @@ def test_date_over_matches_activity_dates() -> None:
     Documents a known precision gap: the file holds one date of birth
     and several activity dates, and nothing distinguishes them.
     """
-    result = _call(path=str(DATA))
+    result = _call(path=str(DATA), entity_types=["DATE", "ZIP_CODE"])
 
     assert result["counts"]["DATE"] > 1
+    assert result["counts"]["ZIP_CODE"] == 1
 
 
 def test_missing_file_reports_tool_error() -> None:
@@ -121,13 +123,14 @@ def test_undeclared_mode_is_refused() -> None:
 
 
 def test_unsupported_entity_type_reports_tool_error() -> None:
-    """
-    A type the engine cannot report is refused at the schema.
-
-    PERSON needs structured input the server never passes, so a text scan
-    could only return nothing for it and report that as success.
-    """
+    """Unknown types fail schema validation rather than appear clean."""
     with pytest.raises(ToolError, match="entity_types"):
+        _call(path=str(DATA), entity_types=["UNKNOWN"])
+
+
+def test_model_entity_requires_configured_bundle() -> None:
+    """Advertised model entities explicitly fail when a bundle is unavailable."""
+    with pytest.raises(ToolError, match="configured local model bundle"):
         _call(path=str(DATA), entity_types=["PERSON"])
 
 

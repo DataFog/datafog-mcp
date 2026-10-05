@@ -15,9 +15,17 @@ import pytest
 from fastmcp import Client
 
 from datafog_mcp.config import SUPPORTED_ENTITIES
-from datafog_mcp.server import mcp
+from datafog_mcp.server import MODEL_ENTITIES, mcp
 
-TOOLS = ["datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove"]
+TOOLS = [
+    "datafog_scan",
+    "datafog_redact",
+    "datafog_mask",
+    "datafog_remove",
+    "datafog_check_text",
+    "datafog_pseudonymize",
+    "datafog_scan_batch",
+]
 
 
 def _schemas() -> dict[str, dict[str, Any]]:
@@ -53,7 +61,7 @@ def test_entity_types_are_enumerated(tool: str) -> None:
     selection = _schemas()[tool]["properties"]["entity_types"]
     array = next(option for option in selection["anyOf"] if option.get("type") == "array")
 
-    assert sorted(array["items"]["enum"]) == sorted(SUPPORTED_ENTITIES)
+    assert sorted(array["items"]["enum"]) == sorted(SUPPORTED_ENTITIES | MODEL_ENTITIES)
 
 
 @pytest.mark.parametrize("tool", TOOLS)

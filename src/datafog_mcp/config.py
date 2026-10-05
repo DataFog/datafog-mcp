@@ -42,7 +42,6 @@ DEFAULT_ENTITIES: tuple[str, ...] = (
     "BEARER_TOKEN",
     "CREDENTIAL_URI",
     "CREDIT_CARD",
-    "DATE",
     "EMAIL",
     "JWT",
     "NPI",
@@ -50,12 +49,11 @@ DEFAULT_ENTITIES: tuple[str, ...] = (
     "PRIVATE_KEY",
     "SSN",
     "US_ROUTING_NUMBER",
-    "ZIP_CODE",
 )
 
 Strategy = Literal["mask", "redact", "remove"]
 
-DEFAULT_MAX_BYTES = 1_048_576
+DEFAULT_MAX_BYTES = 100_000_000
 
 
 @dataclass(frozen=True)

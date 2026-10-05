@@ -26,7 +26,16 @@ from fastmcp.client.transports import StdioTransport
 import datafog_mcp
 
 SECRET = "jack.smith@example.com"
-TOOLS = {"datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove"}
+TOOLS = {
+    "datafog_get_policy",
+    "datafog_scan",
+    "datafog_redact",
+    "datafog_mask",
+    "datafog_remove",
+    "datafog_pseudonymize",
+    "datafog_scan_batch",
+    "datafog_check_text",
+}
 
 
 def _require(condition: bool, message: str) -> None:
@@ -82,6 +91,7 @@ async def _check_session(server: str, workdir: Path, expected: str) -> None:
         **os.environ,
         "DATAFOG_MCP_ALLOWED_ROOTS": str(workdir),
         "FASTMCP_HOME": str(workdir / "fastmcp"),
+        "DATAFOG_POLICY_PATH": str(workdir / "absent-policy.toml"),
     }
 
     async with Client(StdioTransport(server, [], env=env, cwd=str(workdir))) as client:
@@ -92,6 +102,12 @@ async def _check_session(server: str, workdir: Path, expected: str) -> None:
 
         names = {tool.name for tool in await client.list_tools()}
         _require(names == TOOLS, f"tools listed: {sorted(names)}")
+
+        policy = await client.call_tool("datafog_get_policy", {})
+        _require((policy.structured_content or {}).get("on_findings") == "ask", "default policy")
+        checked = await client.call_tool("datafog_check_text", {"text": SECRET})
+        _require((checked.structured_content or {}).get("counts") == {"EMAIL": 1}, "text check")
+        _require(SECRET not in str(checked.content), "text check returned the value")
 
         scan = await client.call_tool("datafog_scan", {"path": str(source)})
         _require((scan.structured_content or {}).get("counts", {}).get("EMAIL") == 1, "EMAIL")

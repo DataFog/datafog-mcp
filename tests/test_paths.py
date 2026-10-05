@@ -352,21 +352,15 @@ def test_tilde_in_the_file_is_expanded(tmp_path: Path, monkeypatch: pytest.Monke
     assert paths.policy().roots == (Path.home().resolve(),)
 
 
-def test_output_must_share_the_input_directory(
+def test_output_can_use_another_existing_directory_in_allowed_roots(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """
-    A destination elsewhere inside the roots is still refused.
-
-    Confining output to the input's directory is what stops the write
-    tools from acting as a general file-creation primitive.
-    """
+    """Explicit destinations may differ from the source directory, within roots."""
     _set_roots(monkeypatch, tmp_path)
     (tmp_path / "elsewhere").mkdir()
     source = tmp_path / "export.csv"
-
-    with pytest.raises(PathNotAllowed, match="same directory"):
-        resolve_output(str(tmp_path / "elsewhere" / "out.csv"), source)
+    output = tmp_path / "elsewhere" / "out.csv"
+    assert resolve_output(str(output), source) == output.resolve()
 
 
 def test_configuration_directory_is_never_a_destination(
