@@ -309,7 +309,9 @@ def test_csv_model_deadline_is_shared_and_writes_no_partial_copy(
     monkeypatch.setattr(runtime, "model_findings", fake_model)
     policy = tmp_path / "policy.toml"
     policy.write_text(
-        'version=1\n[model]\nbundle_directory="/unused-test-bundle"\ntimeout_seconds=10\n'
+        "version=1\n[model]\n"
+        f"bundle_directory={json.dumps(str(tmp_path / 'unused-test-bundle'))}\n"
+        "timeout_seconds=10\n"
     )
     monkeypatch.setenv("DATAFOG_POLICY_PATH", str(policy))
     source, destination = tmp_path / "source.csv", tmp_path / "redacted.csv"
