@@ -2,7 +2,7 @@
 
 Local file checks and transformations for MCP clients, powered by [datafog-core](https://github.com/DataFog/datafog-core). Agents can inspect entity counts and locations without receiving matched values, then create a transformed copy before analysis or sharing.
 
-This branch locks Core **0.4.1** (`>=0.4.1,<0.5`). The optional local name/address model is a separate experimental artifact; installing Core does not install or enable that model.
+This branch locks Core **0.4.2** (`>=0.4.2,<0.5`). The optional local name/address model is a separate experimental artifact; installing Core does not install or enable that model.
 
 ## Install and connect
 
@@ -63,7 +63,7 @@ Default deterministic types: `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `US_ROUTING
 - NPIs and routing numbers require recognizable labels. CSV headers supply context; an arbitrary identifier column is not automatically understood.
 - Dates can be operational timestamps, and five-digit IDs can look like ZIP codes. This is why those types are not default selections.
 - Names and street addresses require the separately configured model below. Its first-/last-name spans map to `PERSON`, not necessarily one combined full-name span.
-- Plain-text email boundaries can include surrounding syntax such as an assignment prefix or SQL quote. CSV parsing protects cell boundaries but does not repair every Core detector limitation. Track [issue #31](https://github.com/DataFog/datafog-mcp/issues/31).
+- Email boundaries use Core 0.4.2 source context for `.env` assignments and standard SQL quoted strings. Plain-text scanning retains legitimate apostrophes and equals signs in email local parts; it can include assignment prefixes or quotes when no source format is selected. SQL backslash escapes, dollar quoting, and encoded email characters are not interpreted. See [the Core boundary policy](https://docs.datafog.ai/guides/email-boundaries).
 - Redaction labels do not preserve distinct identities. Pseudonyms preserve exact-value equality, not person identity; two addresses for one person remain different values.
 
 We test named fixtures and regression behavior; these are not general accuracy guarantees. Review outputs for your data format and use case.
@@ -75,6 +75,8 @@ UTF-8 text files are accepted up to **100,000,000 bytes (100 MB, decimal)** by d
 XLSX, PDF, DOCX, images, archives, and non-UTF-8 encodings are refused. Export or convert them outside DataFog first. A UTF-8 BOM is retained.
 
 `.csv` and `.tsv` use explicit comma/tab parsing, with double quotes and doubled-quote escaping. The first record is a header by default; use `has_header=false` for headerless inputs. `input_format="text"` explicitly treats an irregular export as plain text. There is no silent fallback after a CSV error.
+
+`.env`, `.env.*`, and filenames ending in `.env` automatically select environment assignment boundaries; `.sql` selects standard SQL quoted-string boundaries. Use `input_format="env"` or `input_format="sql"` for other filenames, and `input_format="text"` to override automatic selection. Scan and all copy transformations use the same format. These modes preserve assignment keys/delimiters and enclosing quotes for supported email syntax; they do not parse every SQL dialect or change other entity detectors. SQL findings describe raw source spans, including doubled-apostrophe escapes, rather than decoded database values. Outbound text checks and CSV/TSV cells retain ordinary text email matching.
 
 CSV transformations preserve headers, record/column counts, and untouched cell values. Quoted commas, embedded newlines, escaped quotes, Unicode, empty cells, duplicate headers, and CRLF are supported. Malformed quoting, inconsistent column counts, and blank physical records are refused. Other dialects are not guessed.
 

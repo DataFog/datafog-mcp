@@ -228,7 +228,7 @@ def test_unexpected_engine_failure_cannot_be_misreported_as_clean(
     source = tmp_path / "clean.txt"
     source.write_text("anything")
 
-    def broken(text: str) -> list[Any]:
+    def broken(text: str, config: object = None) -> list[Any]:
         raise RuntimeError("private sentinel")
 
     monkeypatch.setattr(server, "scan", broken)

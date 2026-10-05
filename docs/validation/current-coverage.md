@@ -7,6 +7,7 @@ The original gap inventory mixed current contracts, known detector limitations, 
 | Area | Fixture/test | Contract |
 | --- | --- | --- |
 | Defaults and detector overlap | `test_server.py`, Garmin export | Email/phone present, DATE/ZIP opt-in; selected overlapping types resolved consistently |
+| Email source boundaries | `test_email_context.py` | Real MCP-client scans and redact/mask/remove copies for `.env`, `.env.*`, and SQL, exact Unicode source offsets, legitimate local parts and SQL escapes, explicit format overrides, stale-pagination refusal, unchanged originals and CSV/plain-text behavior |
 | CSV structure | `test_csv_processing.py`, `test_user_flows.py` | Quoted commas/quotes, multiline fields, empty values, Unicode, BOM/CRLF, headerless modes, original offsets, record/field locations, unchanged headers and cells |
 | Policy | `test_policy.py`, `test_user_flows.py` | Strict schema, snapshots/reload, exact case-sensitive allowlists, invalid configuration rejection, advisory scope/action |
 | File transformations | `test_transform.py`, `test_user_flows.py` | Original preserved, meaningful output, scan/write counts agree, permissions preserved, no overwrite |

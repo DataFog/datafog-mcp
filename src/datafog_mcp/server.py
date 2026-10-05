@@ -31,13 +31,13 @@ from datafog_mcp.reader import ReadError, WriteError, read_text_file, write_text
 
 MODEL_ENTITIES = frozenset({"PERSON", "STREET_ADDRESS"})
 if TYPE_CHECKING:
-    from datafog_core import _TransformationConfig
+    from datafog_core import _ScanConfig, _TransformationConfig
 
     EntityType = str
 else:
     EntityType = Literal[tuple(sorted(SUPPORTED_ENTITIES | MODEL_ENTITIES))]
 EntitySelection = Annotated[list[EntityType], Field(min_length=1)] | None
-InputFormat = Literal["auto", "text", "csv", "tsv"]
+InputFormat = Literal["auto", "text", "csv", "tsv", "env", "sql"]
 PageOffset = Annotated[int, Field(ge=0)]
 PageSize = Annotated[int, Field(ge=1, le=100_000)]
 
@@ -236,11 +236,18 @@ async def _process(
         return remaining
 
     csv_without_model = fmt in ("csv", "tsv") and not selected & MODEL_ENTITIES
+    scan_config: _ScanConfig = {
+        "format": "env" if fmt == "env" else "sql" if fmt == "sql" else "text"
+    }
 
     async def process_cell(value: str, value_start: int = 0) -> Any:
         # The entire deterministic CSV loop runs in one worker below. Dispatching
         # two thread-pool jobs per tiny cell dominates large narrow-row exports.
-        found = scan(value) if csv_without_model else await asyncio.to_thread(scan, value)
+        found = (
+            scan(value, scan_config)
+            if csv_without_model
+            else await asyncio.to_thread(scan, value, scan_config)
+        )
         if selected & MODEL_ENTITIES:
             from datafog_mcp.model_runtime import model_findings
 
@@ -336,7 +343,12 @@ async def _process(
 def _format(path: Path, fmt: InputFormat) -> str:
     if fmt != "auto":
         return fmt
-    return {".csv": "csv", ".tsv": "tsv"}.get(path.suffix.lower(), "text")
+    name = path.name.lower()
+    if name == ".env" or name.startswith(".env."):
+        return "env"
+    return {".csv": "csv", ".tsv": "tsv", ".env": "env", ".sql": "sql"}.get(
+        path.suffix.lower(), "text"
+    )
 
 
 def _page(
@@ -475,6 +487,9 @@ async def datafog_scan(
     CSV/TSV scan cells and preserve headers; set has_header=False for headerless files, or
     input_format=text for a text export that happens to have a CSV extension. CSV record/column
     numbers are one-based (record excludes header); offsets are original Unicode code points.
+    .env/.env.* and .env suffixes use env email boundaries; .sql uses standard SQL quoted strings.
+    Set input_format=env/sql for other filenames, or text to retain plain-text email matching.
+    SQL backslash escapes, dollar quoting and encoded email characters are not interpreted.
     A refusal is not clean. After findings follow advisory_action before reading the original.
     Findings are paginated; repeat using next_offset and content_digest until complete.
     """
