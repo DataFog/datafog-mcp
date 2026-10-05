@@ -24,8 +24,8 @@ against its actual target branch, including when PRs are stacked on other branch
 An entry committed earlier in the PR counts; later commits do not need duplicate
 entries. The local pre-commit hooks still run their existing quality checks.
 
-The changelog checker detects a text
-addition, not whether that text accurately describes the change; reviewers must
+The changelog checker detects a text addition, not whether that text accurately
+describes the change; reviewers must
 check its substance. Missing base refs fail the check instead of silently passing.
 
 ## Changes with no user-facing effect
@@ -42,6 +42,27 @@ Both the label and a nonempty reason are required. Reviewers should confirm the
 reason; the label alone is insufficient. CI reruns when the PR description or
 labels change. Repository administrators should require the `Changelog policy`
 status check in branch protection so failed checks prevent merging.
+
+## Automatic bot exemptions
+
+PRs authored by `dependabot[bot]`, `renovate[bot]`, or `pre-commit-ci[bot]`
+(with GitHub account type `Bot`) can omit a changelog entry and exemption reason
+when their complete diff changes only contributor tooling:
+
+- Existing GitHub Actions workflow files: action `uses:` refs only.
+- Existing pre-commit configuration: hook `rev:` refs only.
+- `pyproject.toml`: the `dev`/`ci` dependency groups or Ruff, mypy, Pyright,
+  pytest, and coverage settings only.
+- `uv.lock`: runtime dependencies, including transitive dependencies and
+  optional dependencies, must remain unchanged.
+
+Runtime dependency updates, package/build metadata changes, other files, and
+mixed changes still need an entry or the explicit `no-changelog` exemption.
+New or deleted files and changes the checker cannot classify fail closed.
+Human-authored tooling PRs use the explicit exemption. The author is taken from
+the PR, so a human editing its description or labels does not change the bot's
+eligibility. The bot exemption concerns release notes only; all other checks
+and review requirements still apply.
 
 Run the regular quality checks before opening a PR:
 
