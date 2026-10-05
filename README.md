@@ -45,6 +45,7 @@ File tools take a path and return scan metadata or a copy path. `datafog_policy`
 | Tool | What it does | Output |
 |---|---|---|
 | `datafog_policy` | Reports owner settings and an optional path's routine scanning scope | Metadata only |
+| `datafog_check_text` | Checks an already-composed outbound draft | Counts, character offsets, and advisory guidance |
 | `datafog_scan` | Reports entity types, counts, and character offsets | — |
 | `datafog_redact` | Replaces each value with a label naming its kind, `[EMAIL]` | `name_redacted.ext` |
 | `datafog_mask` | Covers each value character for character, preserving length | `name_masked.ext` |
@@ -153,6 +154,16 @@ The agent can call `datafog_policy` to discover scope, workflow settings, copy d
 Completed scans return advisory `policy.action`: `ask` (default), `transform`, or `stop` when non-allowlisted findings remain; `proceed` when none remain under the selected detectors and allowlists. `transform` includes the suggested strategy (`redact`, `mask`, `remove`, or `pseudonymize`). With `pseudonymize`, it also includes the configured `pseudonym_scope`. Scans never automatically write a copy. Explicit write tools retain the strategy requested by the caller. These actions guide the agent; the server cannot prevent access through another tool. Failed scans or invalid policies never authorize a fallback read of the original.
 
 `datafog-mcp policy` shows the same settings to the owner, including counts instead of exact allowlist values. The parser rejects unknown sections/settings so configuration mistakes cannot silently disable a safeguard. Each request uses one immutable policy snapshot; edits apply to subsequent requests.
+
+### Check outbound drafts before sending
+
+Use `datafog_check_text(text)` for email, chat messages, or other drafts the agent has already composed. It checks text locally using the same selected detectors, exact allowlists, overlap resolution, and configured optional model as file scans. It returns counts, types, Unicode character offsets, and advisory `policy.action`, with `check_before_send = true`. It does not echo the draft or matched values, return a transformed draft, write a file, or send/publish anything. Text is limited to 1 MiB in UTF-8 bytes; an explicit nonempty `entity_types` list replaces the defaults.
+
+Follow `ask`, `transform`, or `stop` when findings remain. With `transform`, revise the draft and check the final version again before sending. If the suggested strategy is `pseudonymize`, use the separate file transformation workflow with its configured scope/key rather than inventing replacements. `proceed` means only that the selected detectors found no non-allowlisted matches; it neither proves the draft contains no sensitive data nor grants permission to send it. Failed checks leave the draft unchecked.
+
+For example, checking `"Contact private-person@example.com"` reports one EMAIL span and the default `ask` guidance without returning the address. After revising the message to remove the address, recheck the revised text. Existing user authorization is still required for any eventual send.
+
+Draft text is already in the agent's context and is also sent as a tool argument. The client/model provider may retain it; this check cannot undo that exposure. Never read an unscanned file to supply its contents as draft text: use the path-based scan first. Draft validation and processing errors withhold argument values; DataFog adds no draft log or persistence. Owner configuration and installed model files may be read, but the tool does not read source data files. Allowed roots and scanning scope apply to file access, not already-composed text.
 
 ### Consistent pseudonyms and local key setup
 

@@ -20,8 +20,11 @@ from datafog_mcp.config import (
     ScanConfig,
     transform_config,
 )
+from datafog_mcp.drafts import DraftValidationMiddleware, validate_draft
 from datafog_mcp.findings import (
     Mode,
+    counts_by_type,
+    finding_to_dict,
     render,
     render_transformation,
 )
@@ -51,6 +54,7 @@ mcp = FastMCP(
     name="datafog",
     version=__version__,
     mask_error_details=True,
+    middleware=[DraftValidationMiddleware()],
     instructions=(
         "Local PII and credential detection and transformation. Scans "
         "files on disk for emails, phone numbers, SSNs, credit card "
@@ -65,7 +69,12 @@ mcp = FastMCP(
         "scans outside that scope are still permitted within roots. Follow "
         "the scan response's advisory policy action: ask the user, transform "
         "a copy using its suggested strategy, or stop. A refused or failed "
-        "scan is never permission to read the original through another tool."
+        "scan is never permission to read the original through another tool. "
+        "Before sending an already-composed outbound draft, call datafog_check_text. "
+        "It reports findings and advisory policy only; it does not rewrite or send text. "
+        "For transform guidance, revise the draft and recheck it before sending. "
+        "A clean check does not grant permission to send. The client may retain tool "
+        "arguments. Never read an unscanned file into context to supply draft text."
     ),
 )
 
@@ -298,15 +307,7 @@ async def _scan_file(
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
-    found = await _detections(content.text, config, current)
-    kept = [
-        item
-        for item in found
-        if config.keeps(item.entity_type)
-        and not current.is_allowlisted(
-            item.entity_type, content.text[item.codepoint_range.start : item.codepoint_range.end]
-        )
-    ]
+    kept = await _selected_findings(content.text, config, current)
 
     # The engine reports every detector's match, so one value can appear
     # twice: an NPI is also a valid phone number. Transforming resolves those
@@ -319,16 +320,83 @@ async def _scan_file(
         findings=resolved.transformations,
         path=str(content.path),
     )
-    response["policy"] = {
-        "advisory": True,
-        "scan_before_read": current.in_scope(content.path),
-        "action": current.on_findings if resolved.transformations else "proceed",
-    }
-    if resolved.transformations and current.on_findings == "transform":
-        response["policy"]["transform_strategy"] = current.transform_strategy
-        if current.pseudonym_scope is not None:
-            response["policy"]["pseudonym_scope"] = current.pseudonym_scope
+    response["policy"] = _findings_policy(current, bool(resolved.transformations))
+    response["policy"]["scan_before_read"] = current.in_scope(content.path)
     return response
+
+
+def _findings_policy(current: OutputPolicy, has_findings: bool) -> dict[str, Any]:
+    """Use the same advisory findings decision for files and outbound drafts."""
+    guidance: dict[str, Any] = {
+        "advisory": True,
+        "action": current.on_findings if has_findings else "proceed",
+    }
+    if has_findings and current.on_findings == "transform":
+        guidance["transform_strategy"] = current.transform_strategy
+        if current.pseudonym_scope is not None:
+            guidance["pseudonym_scope"] = current.pseudonym_scope
+    return guidance
+
+
+@mcp.tool
+async def datafog_check_text(
+    text: str,
+    entity_types: EntitySelection = None,
+) -> dict[str, Any]:
+    """Check an outbound draft already in context before sending or publishing it.
+
+    Use for already-composed email, chat messages, or other outbound text. Never
+    read an unscanned file into context to supply this argument: scan its path first.
+    The client/model provider may retain tool arguments; this cannot undo exposure
+    that happened when composing the draft or putting it into context.
+
+    Returns counts, types, Unicode character offsets, and the owner's advisory
+    findings action. It never echoes text, matched values, hashes, or transformed
+    drafts, reads source files, writes copies, or sends anything. Existing detectors,
+    exact allowlists, overlap handling, and explicitly configured model apply.
+
+    Follow ask/transform/stop guidance. For transform, revise the draft and recheck
+    the final version before sending; pseudonymize guidance requires the separate
+    file workflow with its configured scope and key. A clean result means only that
+    selected detectors found no non-allowlisted matches. It is neither proof the
+    draft contains no sensitive data nor authorization to send or publish it.
+    Failed checks leave the draft unchecked, never approved to send.
+
+    Parameters:
+      text: An already-composed UTF-8 draft, up to 1 MiB in encoded bytes.
+      entity_types: Omit for the configured defaults; a nonempty supported list
+        selects only those categories. Model categories need explicit model setup.
+    Returns:
+      Entity count, per-type counts, character spans, and advisory workflow policy.
+    """
+    with _contained():
+        validate_draft({"text": text, "entity_types": entity_types})
+        current = _request_policy()
+        config = _config_from(entity_types, current)
+        kept = await _selected_findings(text, config, current)
+        # Resolve exactly the same overlaps as file scans; discard rewritten text.
+        resolved = await asyncio.to_thread(transform, text, kept, transform_config("redact"))
+        guidance = _findings_policy(current, bool(resolved.transformations))
+        guidance["check_before_send"] = True
+        return {
+            "entity_count": len(resolved.transformations),
+            "counts": counts_by_type(resolved.transformations),
+            "findings": [finding_to_dict(item) for item in resolved.transformations],
+            "policy": guidance,
+        }
+
+
+async def _selected_findings(text: str, config: ScanConfig, current: OutputPolicy) -> list[Finding]:
+    """Share detector selection and typed exact allowlists across every check/write."""
+    found = await _detections(text, config, current)
+    return [
+        item
+        for item in found
+        if config.keeps(item.entity_type)
+        and not current.is_allowlisted(
+            item.entity_type, text[item.codepoint_range.start : item.codepoint_range.end]
+        )
+    ]
 
 
 async def _detections(text: str, config: ScanConfig, current: OutputPolicy) -> list[Finding]:
@@ -397,15 +465,7 @@ async def _transform_to_file(
     except PathNotAllowed as exc:
         raise ToolError(str(exc)) from None
 
-    found = await _detections(content.text, config, copy_policy)
-    kept = [
-        item
-        for item in found
-        if config.keeps(item.entity_type)
-        and not copy_policy.is_allowlisted(
-            item.entity_type, content.text[item.codepoint_range.start : item.codepoint_range.end]
-        )
-    ]
+    kept = await _selected_findings(content.text, config, copy_policy)
 
     if strategy == "pseudonymize":
         assert selected is not None and provider is not None

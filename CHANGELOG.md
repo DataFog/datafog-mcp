@@ -8,6 +8,8 @@ First release: an MCP server that checks a file for personal data and credential
 
 ### Added
 
+- `datafog_check_text` checks already-composed outbound drafts using existing detector/model selection, exact allowlists, and overlap handling. It returns counts, character spans, and advisory findings guidance without echoing, transforming, saving, or sending the draft. Drafts are bounded to 1 MiB of UTF-8 bytes; malformed arguments and processing failures withhold draft values. A clean result never grants permission to send, and transformed drafts must be revised and rechecked separately.
+
 - Explicit `datafog-mcp model install` setup downloads the pinned DataFog PII EN 65M native release, verifies archive/manifest/file integrity and MCP/Core/platform compatibility, and supports offline installation without overwriting existing bundles. Owner-configured model inference adds PERSON and STREET_ADDRESS across scans and all copy tools with local-only transport, inference deadlines, allowlists, and content-free responses. Missing or failed requested model support refuses the operation with setup guidance; no tool performs downloads or silently falls back to Core-only results.
 
 - `datafog_pseudonymize` writes consistently keyed copies for cross-file linkage using owner-configured scopes. Explicit `datafog-mcp keys create SCOPE` setup supports OS credential storage and an explicitly selected owner-only POSIX file backend. Missing/unavailable keys refuse the operation without generation, replacement, or backend fallback; configured key files and aliases are refused as data. Policy discovery and workflow guidance expose scope names without key material. Pseudonymization does not make data anonymous.

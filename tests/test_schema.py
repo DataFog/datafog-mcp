@@ -17,7 +17,14 @@ from fastmcp import Client
 from datafog_mcp.config import SUPPORTED_ENTITIES
 from datafog_mcp.server import mcp
 
-TOOLS = ["datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove", "datafog_pseudonymize"]
+TOOLS = [
+    "datafog_scan",
+    "datafog_redact",
+    "datafog_mask",
+    "datafog_remove",
+    "datafog_pseudonymize",
+    "datafog_check_text",
+]
 
 
 def _schemas() -> dict[str, dict[str, Any]]:
@@ -79,3 +86,10 @@ def test_pseudonym_schema_requires_scope_and_has_no_key_management_tools() -> No
     assert set(schema["required"]) == {"path", "scope"}
     assert set(schema["properties"]) == {"path", "scope", "output_path", "entity_types"}
     assert set(schemas) == set(TOOLS) | {"datafog_policy"}
+
+
+def test_draft_schema_accepts_text_without_paths_or_send_operations() -> None:
+    schema = _schemas()["datafog_check_text"]
+    assert schema["required"] == ["text"]
+    assert set(schema["properties"]) == {"text", "entity_types"}
+    assert schema["properties"]["text"]["type"] == "string"
