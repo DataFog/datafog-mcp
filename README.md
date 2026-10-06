@@ -81,6 +81,10 @@ Credential detection is not a substitute for a dedicated secret scanner. A clean
 
 UTF-8 text, up to 1 MiB (1,048,576 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. Detection reads the file as flat text, so it finds values anywhere in it but has no notion of columns or fields.
 
+Email matching uses format-specific boundaries in ENV and SQL files. With the default `input_format="auto"`, `.env`, `.env.*`, and `*.env` filenames select ENV boundaries; `*.sql` selects SQL boundaries, ignoring filename case. Other files, including CSV and TSV, use plain-text boundaries. All four tools accept an explicit `input_format` of `env`, `sql`, or `text` to override the filename.
+
+For example, an ENV copy preserves `EMAIL=` and surrounding quotes while transforming the address; a SQL copy preserves the quotes surrounding a string value. Scan offsets refer to the email's span in the original file, including doubled SQL quotes within the address, using Unicode character positions. This is not a full ENV or SQL parser: SQL backslash escapes, dollar quoting, and encoded email characters are not interpreted.
+
 Refused with an error, never scanned:
 
 - **Other encodings.** UTF-16, UTF-32, Latin-1, and so on. Convert to UTF-8 first. A UTF-8 byte-order mark, as Excel writes, is fine and is kept in the copy.
