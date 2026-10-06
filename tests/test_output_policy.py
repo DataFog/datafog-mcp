@@ -19,9 +19,9 @@ from datafog_mcp.server import mcp
 TOOLS = ["datafog_redact", "datafog_mask", "datafog_remove"]
 
 
-def call(tool: str, source: Path, output: Path | None = None) -> dict[str, object]:
+def call(tool: str, source: Path, output: Path | None = None, **options: Any) -> dict[str, object]:
     async def run() -> dict[str, object]:
-        arguments: dict[str, Any] = {"path": str(source), "entity_types": ["EMAIL"]}
+        arguments: dict[str, Any] = {"path": str(source), "entity_types": ["EMAIL"], **options}
         if output is not None:
             arguments["output_path"] = str(output)
         async with Client(mcp) as client:
@@ -223,3 +223,45 @@ def test_symlink_cannot_redirect_output_to_another_allowed_directory(
     with pytest.raises(ToolError, match="configured output directory"):
         call("datafog_redact", source, link / "out.txt")
     assert not (elsewhere / "out.txt").exists()
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+@pytest.mark.parametrize(
+    ("filename", "options", "prefix", "address", "suffix"),
+    [
+        (".env", {}, "EMAIL=", "customer=tag@example.com", "\n"),
+        ("contacts.sql", {}, "SELECT '", "o''connor@example.com", "';\n"),
+        ("export.txt", {"input_format": "env"}, "EMAIL=", "customer=tag@example.com", "\n"),
+    ],
+)
+def test_configured_copies_preserve_email_boundaries_and_detector_defaults(
+    tool: str,
+    filename: str,
+    options: dict[str, Any],
+    prefix: str,
+    address: str,
+    suffix: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / filename
+    original = prefix + address + suffix + "2026-10-05 90210 +1 (415) 555-0123\n"
+    source.write_text(original, encoding="utf-8")
+    copies = tmp_path / "copies"
+    copies.mkdir()
+    directory_policy(monkeypatch, tmp_path, copies)
+
+    result = call(tool, source, entity_types=None, **options)
+    replacement = (
+        "[EMAIL]"
+        if tool == "datafog_redact"
+        else "*" * len(address)
+        if tool == "datafog_mask"
+        else ""
+    )
+    written = Path(str(result["output_path"]))
+    assert written.parent == copies.resolve()
+    assert written.read_text(encoding="utf-8") == original.replace(address, replacement)
+    assert result["counts"] == {"EMAIL": 1}
+    assert address not in str(result)
+    assert source.read_text(encoding="utf-8") == original
