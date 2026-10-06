@@ -15,7 +15,7 @@ First release: an MCP server that checks a file for personal data and credential
 - Email scans and transformed copies preserve ENV assignment syntax and surrounding SQL string quotes using datafog-core 0.4.2. All four tools infer these email boundaries from common ENV/SQL filenames and accept an `input_format` override; other files retain plain-text matching.
 
 - `DATE`, `ZIP_CODE`, and `PHONE` are opt-in for scans and all write tools, reducing matches on operational timestamps and numeric IDs. Select them explicitly through `entity_types`; an explicit list replaces the defaults. Detection coverage and advisory-use limitations are documented more precisely.
-- Owners can choose one copy destination in `policy.toml` using `datafog-mcp policy --edit`. Tool-selected filenames stay within that directory, subject to allowed roots and directory denials; absent policy keeps sibling copies. Invalid copy policy or insufficient destination disk space refuses writes.
+- Owners can choose one copy destination in `policy.toml` using `datafog-mcp policy --edit`. Tool-selected filenames stay within that directory, subject to allowed roots and directory denials; absent policy keeps sibling copies. Invalid copy policy or insufficient destination disk space refuses writes. Output filenames beginning with `.` are refused; hidden inputs remain readable and receive visible default copy names.
 
 
 ### Security

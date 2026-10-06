@@ -13,7 +13,7 @@ from typing import Any, TextIO, cast
 
 import pytest
 
-from datafog_mcp.paths import ALLOWED_ROOTS_VAR
+from datafog_mcp.paths import ALLOWED_ROOTS_VAR, PathNotAllowed
 from datafog_mcp.reader import (
     FileExists,
     FileTooLarge,
@@ -361,3 +361,13 @@ def test_space_check_failure_refuses_copy_without_exposing_exception(
 
     assert "sensitive@example.com" not in str(excinfo.value)
     assert not destination.exists()
+
+
+def test_writer_cannot_create_a_hidden_startup_file(tmp_path: Path) -> None:
+    source = tmp_path / "input.txt"
+    source.write_text("unchanged", encoding="utf-8")
+    target = tmp_path / ".profile"
+    with pytest.raises(PathNotAllowed, match="must not begin with a dot"):
+        write_text_file(target, "startup commands", beside=source)
+    assert not target.exists()
+    assert source.read_text(encoding="utf-8") == "unchanged"

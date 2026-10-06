@@ -265,3 +265,75 @@ def test_configured_copies_preserve_email_boundaries_and_detector_defaults(
     assert result["counts"] == {"EMAIL": 1}
     assert address not in str(result)
     assert source.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+@pytest.mark.parametrize("configured", [False, True])
+@pytest.mark.parametrize("filename", [".profile", ".bashrc", ".zshrc", ".env", ".custom"])
+def test_hidden_output_names_are_refused(
+    tool: str,
+    configured: bool,
+    filename: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "input.txt"
+    original = "contact person@example.com"
+    source.write_text(original, encoding="utf-8")
+    destination = tmp_path
+    if configured:
+        destination = tmp_path / "copies"
+        destination.mkdir()
+        directory_policy(monkeypatch, tmp_path, destination)
+    target = destination / filename
+
+    with pytest.raises(ToolError, match="must not begin with a dot"):
+        call(tool, source, target)
+    assert not target.exists()
+    assert source.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+@pytest.mark.parametrize("configured", [False, True])
+@pytest.mark.parametrize("filename", [".env", ".env.production", "..env"])
+def test_hidden_inputs_get_visible_copies(
+    tool: str,
+    configured: bool,
+    filename: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / filename
+    original = "EMAIL=person@example.com\n"
+    source.write_text(original, encoding="utf-8")
+    destination = tmp_path
+    if configured:
+        destination = tmp_path / "copies"
+        destination.mkdir()
+        directory_policy(monkeypatch, tmp_path, destination)
+
+    scanned = call("datafog_scan", source, input_format="env")
+    result = call(tool, source, input_format="env")
+    written = Path(str(result["output_path"]))
+    suffix = {"datafog_redact": "redacted", "datafog_mask": "masked", "datafog_remove": "removed"}[
+        tool
+    ]
+    expected_names = {
+        ".env": f"env_{suffix}",
+        ".env.production": f"env_{suffix}.production",
+        "..env": f"copy_{suffix}.env",
+    }
+    assert written == destination / expected_names[filename]
+    assert not written.name.startswith(".")
+    assert result["counts"] == scanned["counts"] == {"EMAIL": 1}
+    replacement = (
+        "[EMAIL]"
+        if tool == "datafog_redact"
+        else "*" * len("person@example.com")
+        if tool == "datafog_mask"
+        else ""
+    )
+    assert written.read_text(encoding="utf-8") == original.replace(
+        "person@example.com", replacement
+    )
+    assert source.read_text(encoding="utf-8") == original
