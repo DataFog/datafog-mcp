@@ -1,0 +1,69 @@
+name: Fresh native model integration
+on:
+  pull_request:
+    paths: ['src/datafog_mcp/model_runtime.py', 'src/datafog_mcp/server.py', 'src/datafog_mcp/policy.py', 'tests/test_model_runtime.py', 'tests/test_name_composition.py', 'tests/test_csv_processing.py', 'scripts/**', '.github/workflows/native-model.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-model-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  actual-model:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-22.04
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+          - platform: macos-arm64
+            runner: macos-14
+          - platform: macos-x86_64
+            runner: macos-15-intel
+          - platform: windows-x86_64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff
+        with:
+          version: '0.11.26'
+          python-version: '3.12'
+          enable-cache: false
+      - run: uv sync --frozen --group dev --group ci
+      - name: Fresh public download and installation
+        run: uv run --no-project --with huggingface-hub==0.36.2 --python 3.12 python scripts/fetch_native_test_bundle.py --platform '${{ matrix.platform }}' --destination .work/native/bundle
+      - name: Actual model, CSV and candidate composition tests
+        env:
+          HF_HUB_OFFLINE: '1'
+        run: |
+          export DATAFOG_TEST_MODEL_BUNDLE="$(pwd)/.work/native/bundle"
+          uv run --frozen pytest tests/test_model_runtime.py tests/test_csv_processing.py tests/test_name_composition.py --no-cov --junitxml=.work/native/tests.xml
+          uv run --frozen python - <<'PY'
+          import json, os, pathlib, xml.etree.ElementTree as ET
+          root=ET.parse('.work/native/tests.xml').getroot()
+          stats={k:sum(int(s.attrib.get(k,0)) for s in root.iter('testsuite')) for k in ('tests','failures','errors','skipped')}
+          assert stats['tests']>=40 and not any(stats[k] for k in ('failures','errors','skipped'))
+          proof=json.loads(pathlib.Path('.work/native/download-proof.json').read_text());proof.update(tests=stats,source_commit=os.environ['GITHUB_SHA'],workflow_run=os.environ['GITHUB_RUN_ID'])
+          pathlib.Path('.work/native/qualification.json').write_text(json.dumps(proof,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: actual-model-${{ matrix.platform }}
+          path: |
+            .work/native/download-proof.json
+            .work/native/tests.xml
+            .work/native/qualification.json
+          if-no-files-found: error
+          retention-days: 14
