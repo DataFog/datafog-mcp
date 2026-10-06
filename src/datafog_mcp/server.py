@@ -273,10 +273,12 @@ async def _transform_to_file(
 
     source = content.path
     suffix = _OUTPUT_SUFFIXES[strategy]
+    # Hidden inputs remain readable, but copies must never create dotfiles.
+    output_stem = source.stem.lstrip(".") or "copy"
     destination = (
         Path(output_path)
         if output_path
-        else (copy_policy.directory or source.parent) / f"{source.stem}_{suffix}{source.suffix}"
+        else (copy_policy.directory or source.parent) / f"{output_stem}_{suffix}{source.suffix}"
     )
 
     try:
