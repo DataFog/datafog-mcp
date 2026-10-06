@@ -37,7 +37,7 @@ def _call(**arguments: Any) -> dict[str, Any]:
 
 def test_finds_profile_identifiers() -> None:
     """The header block's email, phone, and postal code are found."""
-    result = _call(path=str(DATA))
+    result = _call(path=str(DATA), entity_types=["EMAIL", "PHONE", "ZIP_CODE"])
 
     assert result["counts"]["EMAIL"] == 1
     assert result["counts"]["PHONE"] == 1
@@ -94,7 +94,7 @@ def test_date_over_matches_activity_dates() -> None:
     Documents a known precision gap: the file holds one date of birth
     and several activity dates, and nothing distinguishes them.
     """
-    result = _call(path=str(DATA))
+    result = _call(path=str(DATA), entity_types=["DATE"])
 
     assert result["counts"]["DATE"] > 1
 
