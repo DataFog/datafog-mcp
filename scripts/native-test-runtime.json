@@ -1,0 +1,170 @@
+{
+  "repo": "DataFog/pii-en-65m",
+  "revision": "7cadd41e21f59b2a149e31378d073cf6ca057531",
+  "model_revision": "02cc6ca86a11dcb2b328861687770a22a7ea1b76",
+  "tool_sha256": {
+    "tools/common.py": "b72fbea9ad2ae4ea9e231a420137d7e5ad5270089bb33f754537e0325338074e",
+    "tools/install_bundle.py": "08534261ef2e3fefe27b224eee1d0e6aa26ff62fce98db00f5abd8562641f3de"
+  },
+  "platforms": {
+    "linux-x86_64": {
+      "filename": "datafog-pii-0.1.0-runtime-0.2.0-linux-x86_64.tar.gz",
+      "sha256": "355f54837d3f4ff0aebc72700cb38591176b29e0f75c63c66e04d874df4eb713",
+      "bytes": 265799226,
+      "provenance": {
+        "model_version": "0.1.0",
+        "runtime_version": "0.2.0",
+        "platform": "linux-x86_64",
+        "host": "Linux-6.8.0-1064-azure-x86_64-with-glibc2.35",
+        "hf_revision": "02cc6ca86a11dcb2b328861687770a22a7ea1b76",
+        "runtime": {
+          "url": "https://files.pythonhosted.org/packages/34/35/e7f862dbacbc99fadd9b14a614e49c99bf0f35fd9927a82f096e3de33531/onnxruntime-1.30.0-cp312-cp312-manylinux_2_28_x86_64.whl",
+          "filename": "onnxruntime-1.30.0-cp312-cp312-manylinux_2_28_x86_64.whl",
+          "sha256": "fa688e7891a6aa206636fe7372e27ee75fd17713289f6b4fc7b190e0a7de9328",
+          "source": "official PyPI CPU wheel",
+          "version": "1.30.0"
+        },
+        "native_files": [
+          "libonnxruntime_providers_shared.so",
+          "libonnxruntime.so.1.30.0"
+        ],
+        "telemetry_disabled": true,
+        "repository_commit": "b9ce97fe0e3e07b833ac0f122cdaf234af186555",
+        "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+        "python": "3.12.14 (main, Aug 13 2026, 02:48:23) [GCC 11.4.0]",
+        "status": "candidate; qualification evidence required"
+      }
+    },
+    "linux-aarch64": {
+      "filename": "datafog-pii-0.1.0-runtime-0.2.0-linux-aarch64.tar.gz",
+      "sha256": "c22fd91dd601e22ccb13d074a555e58a6926e7b57adb5234171261763fa5b203",
+      "bytes": 263744529,
+      "provenance": {
+        "model_version": "0.1.0",
+        "runtime_version": "0.2.0",
+        "platform": "linux-aarch64",
+        "host": "Linux-6.17.0-1022-azure-aarch64-with-glibc2.39",
+        "hf_revision": "02cc6ca86a11dcb2b328861687770a22a7ea1b76",
+        "runtime": {
+          "url": "https://files.pythonhosted.org/packages/16/bd/cbc5b8f91963689fdd622f463508c01d0aa95d3f944747b1e0b1eb2160b8/onnxruntime-1.30.0-cp312-cp312-manylinux_2_28_aarch64.whl",
+          "filename": "onnxruntime-1.30.0-cp312-cp312-manylinux_2_28_aarch64.whl",
+          "sha256": "6c32a000d5139a38ba9349030b0032e3331acb559d596b22738d9d2b343a2b83",
+          "source": "official PyPI CPU wheel",
+          "version": "1.30.0"
+        },
+        "native_files": [
+          "libonnxruntime_providers_shared.so",
+          "libonnxruntime.so.1.30.0"
+        ],
+        "telemetry_disabled": true,
+        "repository_commit": "b9ce97fe0e3e07b833ac0f122cdaf234af186555",
+        "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+        "python": "3.12.14 (main, Aug 13 2026, 02:48:06) [GCC 13.3.0]",
+        "status": "candidate; qualification evidence required"
+      }
+    },
+    "macos-arm64": {
+      "filename": "datafog-pii-0.1.0-runtime-0.2.0-macos-arm64.tar.gz",
+      "sha256": "b2980aa1de1702957da3182a0aee3ac3fed2686cf146f52eb037256936b04e37",
+      "bytes": 262335474,
+      "provenance": {
+        "model_version": "0.1.0",
+        "runtime_version": "0.2.0",
+        "platform": "macos-arm64",
+        "host": "macOS-14.8.9-arm64-arm-64bit",
+        "hf_revision": "02cc6ca86a11dcb2b328861687770a22a7ea1b76",
+        "runtime": {
+          "url": "https://files.pythonhosted.org/packages/31/6f/48169f2e62b405bff5053cbd1d73fb5ce41ef7ecd13bb3bfcc191e689b8a/onnxruntime-1.30.0-cp312-cp312-macosx_14_0_arm64.whl",
+          "filename": "onnxruntime-1.30.0-cp312-cp312-macosx_14_0_arm64.whl",
+          "sha256": "001ed726c9bd5e2bc92faade7d37d889e9606a350b7d5529f0227df2e3bb57fd",
+          "source": "official PyPI CPU wheel",
+          "version": "1.30.0"
+        },
+        "native_files": [
+          "libonnxruntime.1.30.0.dylib"
+        ],
+        "telemetry_disabled": true,
+        "repository_commit": "b9ce97fe0e3e07b833ac0f122cdaf234af186555",
+        "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+        "python": "3.12.10 (v3.12.10:0cc81280367, Apr  8 2025, 08:46:59) [Clang 13.0.0 (clang-1300.0.29.30)]",
+        "status": "candidate; qualification evidence required"
+      }
+    },
+    "macos-x86_64": {
+      "filename": "datafog-pii-0.1.0-runtime-0.2.0-macos-x86_64.tar.gz",
+      "sha256": "47ae14fe1a37704672c2e6ebcad5e428b4cef9b3c538f092fa9789975199a53a",
+      "bytes": 262222950,
+      "provenance": {
+        "model_version": "0.1.0",
+        "runtime_version": "0.2.0",
+        "platform": "macos-x86_64",
+        "host": "macOS-15.7.9-x86_64-i386-64bit",
+        "hf_revision": "02cc6ca86a11dcb2b328861687770a22a7ea1b76",
+        "runtime": {
+          "source": "native source build",
+          "repo": "https://github.com/microsoft/onnxruntime.git",
+          "revision": "f2c39fe2f838cf35ce7da92824f5a5e3ee6e88a7",
+          "version": "1.30.0",
+          "minimum_macos": "15.0",
+          "wheel_sha256": "b5038ea18c33ae7928ab4839d177d3de1ca5b7ab96b2775e0c7cb83a405d5021",
+          "wheel_filename": "onnxruntime-1.30.0-cp312-cp312-macosx_15_0_universal2.whl"
+        },
+        "native_files": [
+          "libonnxruntime.1.30.0.dylib"
+        ],
+        "telemetry_disabled": true,
+        "repository_commit": "b9ce97fe0e3e07b833ac0f122cdaf234af186555",
+        "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+        "python": "3.12.10 (v3.12.10:0cc81280367, Apr  8 2025, 08:47:00) [Clang 13.0.0 (clang-1300.0.29.30)]",
+        "status": "candidate; qualification evidence required"
+      }
+    },
+    "windows-x86_64": {
+      "filename": "datafog-pii-0.1.0-runtime-0.2.0-windows-x86_64.tar.gz",
+      "sha256": "cd4738fcff9f440fa80ce6a71be8c71719e2137d7fd35a8c099f42238740a8f3",
+      "bytes": 249849360,
+      "provenance": {
+        "model_version": "0.1.0",
+        "runtime_version": "0.2.0",
+        "platform": "windows-x86_64",
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "hf_revision": "02cc6ca86a11dcb2b328861687770a22a7ea1b76",
+        "runtime": {
+          "url": "https://files.pythonhosted.org/packages/a6/13/0f1699f6de549c9324bc9112a2a85b14c517904cd11b562a654643b755a1/onnxruntime-1.30.0-cp312-cp312-win_amd64.whl",
+          "filename": "onnxruntime-1.30.0-cp312-cp312-win_amd64.whl",
+          "sha256": "f3501472571f1b1eee50e017851e7929f5ea37312d2d8c2494a19e8fc58b4a38",
+          "source": "official PyPI CPU wheel",
+          "version": "1.30.0"
+        },
+        "native_files": [
+          "onnxruntime.dll",
+          "onnxruntime_providers_shared.dll"
+        ],
+        "telemetry_disabled": true,
+        "repository_commit": "b9ce97fe0e3e07b833ac0f122cdaf234af186555",
+        "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+        "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+        "status": "candidate; qualification evidence required",
+        "manifest_path_repair": {
+          "original_archive_sha256": "afcceebb647288f88eda67e9c18d46ce22e384a96902f8b2fbd56b8a08527d99",
+          "packaging_commit": "51324937c52852fc70bec96674c3ed39a617dac0",
+          "native_files_unchanged": {
+            "datafog-pii.exe": {
+              "sha256": "569e3f310c4a969ef5338c2d6f89c34db0413522f9b6210fb1fd77569f9dea27",
+              "bytes": 4235264
+            },
+            "onnxruntime.dll": {
+              "sha256": "e42c5c917207ff706530315177e39dca2539695a6a8d968a22225e34291b1f12",
+              "bytes": 18446176
+            },
+            "onnxruntime_providers_shared.dll": {
+              "sha256": "46b999f9d5cd9d284091407e9f50a262624e6a71265fc428a1dfbd42d149bd81",
+              "bytes": 21856
+            }
+          },
+          "change": "Canonical POSIX manifest paths; no executable/library/model change"
+        }
+      }
+    }
+  }
+}
