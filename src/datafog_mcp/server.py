@@ -188,6 +188,7 @@ def _digest(text: str, policy: Policy, selected: set[str], fmt: str, header: boo
                 "allow": dict(policy.allow_exact),
                 "format": fmt,
                 "header": header,
+                "model_join_person_gap": policy.model_join_person_gap,
                 "model": (
                     model_signature(policy.model_bundle_directory)
                     if policy.model_bundle_directory is not None and selected & MODEL_ENTITIES
@@ -242,15 +243,19 @@ async def _process(
         # two thread-pool jobs per tiny cell dominates large narrow-row exports.
         found = scan(value) if csv_without_model else await asyncio.to_thread(scan, value)
         if selected & MODEL_ENTITIES:
-            from datafog_mcp.model_runtime import model_findings
+            from datafog_mcp.model_runtime import join_person_findings, model_findings
 
             assert policy.model_bundle_directory is not None
             found.extend(
-                await asyncio.to_thread(
-                    model_findings,
+                join_person_findings(
                     value,
-                    policy.model_bundle_directory,
-                    remaining_model_time(),
+                    await asyncio.to_thread(
+                        model_findings,
+                        value,
+                        policy.model_bundle_directory,
+                        remaining_model_time(),
+                    ),
+                    policy.model_join_person_gap,
                 )
             )
         kept = [
@@ -269,13 +274,18 @@ async def _process(
         )
 
     async def process_record(context: str, ranges: list[TextRange]) -> list[Any]:
-        from datafog_mcp.model_runtime import model_findings
+        from datafog_mcp.model_runtime import join_person_findings, model_findings
 
         assert policy.model_bundle_directory is not None
         found = await asyncio.to_thread(scan, context)
         found.extend(
-            await asyncio.to_thread(
-                model_findings, context, policy.model_bundle_directory, remaining_model_time()
+            join_person_findings(
+                context,
+                await asyncio.to_thread(
+                    model_findings, context, policy.model_bundle_directory, remaining_model_time()
+                ),
+                policy.model_join_person_gap,
+                tuple(edge for r in ranges for edge in (r.start, r.end)),
             )
         )
         results: list[Any] = []

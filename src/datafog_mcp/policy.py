@@ -43,6 +43,7 @@ class Policy:
     source_path: Path | None = None
     model_bundle_directory: Path | None = None
     model_timeout_seconds: int = 30
+    model_join_person_gap: int = 0
     allow_exact: Mapping[str, tuple[str, ...]] = field(default_factory=lambda: MappingProxyType({}))
     output_directory: Path | None = None
     on_findings: Action = "ask"
@@ -63,6 +64,8 @@ class Policy:
     )
 
     def __post_init__(self) -> None:
+        if type(self.model_join_person_gap) is not int or not 0 <= self.model_join_person_gap <= 3:
+            raise PolicyError("Person composition gap must be an integer from 0 to 3.")
         # Copy nested collections as well, so callers cannot mutate a snapshot.
         object.__setattr__(
             self,
@@ -153,7 +156,9 @@ def _parse(data: object, source_path: Path) -> Policy:
         root.get("limits", {}),
         {"max_file_bytes", "max_text_bytes", "max_findings", "max_batch_files"},
     )
-    model = _table(root.get("model", {}), {"bundle_directory", "timeout_seconds"})
+    model = _table(
+        root.get("model", {}), {"bundle_directory", "timeout_seconds", "join_person_gap"}
+    )
     pseudonymization = _table(root.get("pseudonymization", {}), {"scopes"})
     raw_scopes = pseudonymization.get("scopes", {})
     if not isinstance(raw_scopes, dict):
@@ -192,6 +197,7 @@ def _parse(data: object, source_path: Path) -> Policy:
         if "bundle_directory" in model
         else None,
         model_timeout_seconds=_positive(model.get("timeout_seconds", 30), 300),
+        model_join_person_gap=cast(int, model.get("join_person_gap", 0)),
         allow_exact=allow_exact,
         output_directory=_path(output["directory"]) if "directory" in output else None,
         on_findings=cast(

@@ -165,6 +165,8 @@ A compatible local native bundle can be selected with:
 [model]
 bundle_directory = "/absolute/path/to/native-bundle"
 timeout_seconds = 30
+# Optional experimental composition of adjacent PERSON fragments (0 disables):
+join_person_gap = 0
 ```
 
 The bundle and runtime must be installed separately before serving. This enables `PERSON` and `STREET_ADDRESS` alongside the deterministic detectors. Without it, explicit model-type requests fail rather than falsely reporting clean results. Configured inference failures also fail explicitly; there is no silent downgrade. Model weights are not automatically fetched, and this configuration is not a claim that the checkpoint passed release acceptance. See [validation coverage](docs/validation/current-coverage.md) for qualification boundaries.
@@ -203,3 +205,12 @@ For another client, remove its server configuration. Policy, roots, optional log
 ## License
 
 MIT
+
+
+The experimental `join_person_gap` setting accepts 0–3 spaces or tabs. With 1,
+`José` and `García` become a single PERSON finding covering `José García`.
+Composition stays within CSV cells and never crosses newlines or punctuation.
+Unjoined findings retain native calibrated scores. Composed findings identify
+`datafog-local-pii-composed` and have no calibrated confidence. Model weights,
+native labels and calibration are unchanged. Development source-label results
+are provisional; this setting defaults to disabled.

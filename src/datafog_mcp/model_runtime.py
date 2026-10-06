@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -32,6 +33,51 @@ def _executable_name() -> str:
 
 class ModelRuntimeError(ValueError):
     """A sanitized model failure safe for tool responses."""
+
+
+def join_person_findings(
+    text: str, findings: list[Finding], gap: int, barriers: tuple[int, ...] = ()
+) -> list[Finding]:
+    """Opt-in composition; preserve native labels and unjoined confidence values."""
+    if type(gap) is not int or not 0 <= gap <= 3:
+        raise ModelRuntimeError("Person composition gap must be an integer from 0 to 3.")
+    if gap == 0:
+        return findings
+    names = sorted(
+        (f for f in findings if f.entity_type == "PERSON"),
+        key=lambda f: (f.codepoint_range.start, f.codepoint_range.end),
+    )
+    joined: list[Finding] = []
+    for finding in names:
+        previous = joined[-1] if joined else None
+        between = (
+            text[previous.codepoint_range.end : finding.codepoint_range.start]
+            if previous is not None
+            else ""
+        )
+        if (
+            previous is not None
+            and re.fullmatch(r"[ \t]{1," + str(gap) + "}", between)
+            and not any(
+                previous.codepoint_range.start < edge < finding.codepoint_range.end
+                for edge in barriers
+            )
+        ):
+            joined[-1] = Finding(
+                "PERSON",
+                text[previous.codepoint_range.start : finding.codepoint_range.end],
+                TextRange(previous.byte_range.start, finding.byte_range.end),
+                TextRange(previous.codepoint_range.start, finding.codepoint_range.end),
+                "datafog-local-pii-composed",
+                None,  # The calibrated native scores do not calibrate a composed span.
+                "name-gap-v1",
+            )
+        else:
+            joined.append(finding)
+    return sorted(
+        [f for f in findings if f.entity_type != "PERSON"] + joined,
+        key=lambda f: (f.codepoint_range.start, f.codepoint_range.end),
+    )
 
 
 def _convert(text: str, response: Any) -> list[Finding]:
