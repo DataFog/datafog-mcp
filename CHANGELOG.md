@@ -25,6 +25,6 @@ First release: an MCP server that checks a file for personal data and credential
 
 ### Known limitations
 
-- Reads UTF-8 text files up to 1 MiB. Other encodings, binary formats such as XLSX and PDF, and larger files are refused.
+- Reads UTF-8 text files up to 10 MB (10,000,000 bytes). Other encodings, binary formats such as XLSX and PDF, and larger files are refused.
 - Detection is pattern-based. It reduces exposure but does not de-identify, names are not detected in plain text, and a clean result is not proof a file holds no sensitive data.
 - An agent can still open a file directly instead of using these tools.
