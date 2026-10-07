@@ -9,6 +9,7 @@ First release: an MCP server that checks a file for personal data and credential
 ### Added
 
 - `datafog_scan` reports the entity types, per-type counts, and character offsets found in a file. A value two detectors both match is reported once, as the type the write tools would replace it with.
+- `datafog_scan` lists offsets for up to 1,200 findings. Above that it returns complete counts without offsets, so dense files stay within agent context limits.
 - `datafog_redact`, `datafog_mask`, and `datafog_remove` write a transformed copy beside the original, which is never modified.
 - Detection by the [datafog-core](https://github.com/DataFog/datafog-core) engine, on this machine: email addresses, SSNs, credit card numbers, labeled US routing numbers and NPIs, GitHub and Stripe API keys, bearer tokens in Authorization headers, JWTs, PostgreSQL connection strings with a password, and complete PEM private-key blocks. Dates, ZIP codes, phone numbers, and IP addresses on request.
 - Allowed roots confine every read and write to configured directories. `datafog-mcp roots` shows and edits them. Credential directories such as `.ssh` are always refused.

@@ -48,10 +48,12 @@ Every tool takes a path and returns a path. None returns file contents or matche
 
 | Tool | What it does | Output |
 |---|---|---|
-| `datafog_scan` | Reports entity types, counts, and character offsets | — |
+| `datafog_scan` | Reports entity types, counts, and character offsets (offsets for up to 1,200 findings) | — |
 | `datafog_redact` | Replaces each value with a label naming its kind, `[EMAIL]` | `name_redacted.ext` |
 | `datafog_mask` | Covers each value character for character, preserving length | `name_masked.ext` |
 | `datafog_remove` | Deletes each value outright, leaving no marker | `name_removed.ext` |
+
+A scan lists the offsets of at most 1,200 findings, so a dense file can't flood the agent's context. Above that, `findings` is empty and `findings_listed` is `false`, while `entity_count` and `counts` remain complete. To see where values are in a dense file, scan again with fewer `entity_types`.
 
 The write tools create a sibling of the input and never modify the original. An existing file at the destination is never overwritten. `output_path` can name the file but not move it to another directory.
 
