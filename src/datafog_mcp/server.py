@@ -153,7 +153,7 @@ async def datafog_scan(
     WHEN NOT TO CALL IT: source code, configuration tracked in the project's
     repository, lockfiles, or build output.
 
-    INPUTS: UTF-8 text files up to 1 MiB, such as CSV, TSV, JSON, logs, and
+    INPUTS: UTF-8 text files up to 10 MB, such as CSV, TSV, JSON, logs, and
     plain text. Other encodings, binary files, and larger files are refused
     with an error rather than scanned. XLSX, PDF, DOCX, images, and archives
     are binary and are not parsed. A refusal is not a clean result: the file
@@ -315,7 +315,7 @@ async def datafog_redact(
     replaced, so read the copy to see the result.
 
     Parameters:
-      path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
+      path: The file to read. UTF-8 text up to 10 MB, as for datafog_scan.
       output_path: Where to write. Defaults to a sibling of the input with a
       _redacted suffix.
       entity_types: The types to replace. Defaults to the same types as
@@ -356,7 +356,7 @@ async def datafog_mask(
     replaced, so read the copy to see the result.
 
     Parameters:
-      path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
+      path: The file to read. UTF-8 text up to 10 MB, as for datafog_scan.
       output_path: Where to write. Defaults to a sibling of the input with
       a _masked suffix.
       entity_types: The types to replace. Defaults to the same types as
@@ -398,7 +398,7 @@ async def datafog_remove(
     deleted.
 
     Parameters:
-      path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
+      path: The file to read. UTF-8 text up to 10 MB, as for datafog_scan.
       output_path: Where to write. Defaults to a sibling of the input with
       a _removed suffix.
       entity_types: The types to delete. Defaults to the same types as
