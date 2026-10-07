@@ -657,15 +657,15 @@ wheels = [
 
 [[package]]
 name = "datafog-core"
-version = "0.4.1"
+version = "0.4.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/30/11/a64512c879105718d01d704492cefd46fa1301e402764eb7ebe13459ddb2/datafog_core-0.4.1.tar.gz", hash = "sha256:74a8f545ccfff8d52a149ac9bc02cd6cc8295e883cd36cbb96b6b5f460f35807", size = 108322, upload-time = "2026-09-29T00:01:24.068Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cc/66/d512f463319892548bb13b24f244af7ee0d9cffe35d82fc2ea646e4ac15e/datafog_core-0.4.2.tar.gz", hash = "sha256:6d9ae2e6dc8da1c5431ceb2d7b1c0e86f423f72ee95fac9526ddd886a6aaedf8", size = 111472, upload-time = "2026-10-05T02:52:01.46Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e6/73/e0dd031f265270cf43275ee3eacd33c815c47a7c6015756b98d4ba932810/datafog_core-0.4.1-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:6ca693db39f047c84f66619ee0d02991cf6b014b296e128ccb382470f547f765", size = 1646630, upload-time = "2026-09-29T00:01:15.878Z" },
-    { url = "https://files.pythonhosted.org/packages/82/4d/10a0a3dd2d3dfdbd09ca335449c626f1d1292cb94fb8629e9f72a80ffda8/datafog_core-0.4.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:2f18f93854ae335b3e12de52b61c29b7013ff03e601bf67380cb09712ecef5cb", size = 1575976, upload-time = "2026-09-29T00:01:17.36Z" },
-    { url = "https://files.pythonhosted.org/packages/19/c3/2977e4960e33199074c6a214cfa1fa651fb231d29b4c478598ac69aeae1a/datafog_core-0.4.1-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:bd6d0568143100ffca0867081840f0c19e8f3853bbf9ca906f054f57b9114ae0", size = 1749058, upload-time = "2026-09-29T00:01:18.855Z" },
-    { url = "https://files.pythonhosted.org/packages/83/22/906662feea899c2eefb62ec9756e7fc8eec88bfbc91b820c864c4076dc2e/datafog_core-0.4.1-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:1d1fd7b5048980cdfa7b6f2edcf6ed89ae561c9ba917a08a023f8d7bd24561d6", size = 1821777, upload-time = "2026-09-29T00:01:20.695Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/5d/cd6e2564d08e2c0dcd8cb7569e22df5d6f18fab06548915f421bc62d75f7/datafog_core-0.4.1-cp310-abi3-win_amd64.whl", hash = "sha256:2e2b0badc61fae9c7b77d0776424d3a28e2e0c3ad7f151eaf56df219d763c1b2", size = 1434389, upload-time = "2026-09-29T00:01:22.714Z" },
+    { url = "https://files.pythonhosted.org/packages/79/0e/c9062498008f5204a7a3201747e11da3bc09dd040c2218eaad3fd7f2d78d/datafog_core-0.4.2-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:4ff9f2cdb96bd3c930e3653d27d013ca3b2b7ca5994498472a13c9eee9bce877", size = 1645771, upload-time = "2026-10-05T02:51:53.153Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/a8/25b98a1bbec872ccee638d42ecccfed9be691684ee0872f0eaf573bea54a/datafog_core-0.4.2-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:3d7b02015f438daee0a6e0c1c9b7e127e037d55996002352dbd685505bad49ef", size = 1581655, upload-time = "2026-10-05T02:51:54.732Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/99/3d5862c3515464efac5571935fcb9c1b2a8c7be367e326d09ba18c769fe5/datafog_core-0.4.2-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:0359b03e30480f927769829335c4482354dbcd5a7879c21a7d8c204f35242858", size = 1753237, upload-time = "2026-10-05T02:51:56.356Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/d2/beb5d29ac0e4bad9a453bd14216f741de0ccd5fdeea40445137d52433572/datafog_core-0.4.2-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:b05eec8e1c18db6789bbc3b0e3a5770074612ec14cec050a366a6ee8851c441c", size = 1827753, upload-time = "2026-10-05T02:51:57.968Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/44/c4e4bfab8eac15ab9d2de365ebbe3e9f3aa377546b1bdc91bde9559dee3a/datafog_core-0.4.2-cp310-abi3-win_amd64.whl", hash = "sha256:c52339ea69c3af41f28ea994f7bcfd929dac1a8fde9a16dce5cf71485a80a036", size = 1436865, upload-time = "2026-10-05T02:51:59.786Z" },
 ]
 
 [[package]]
@@ -677,6 +677,7 @@ dependencies = [
     { name = "fastmcp" },
     { name = "mcp" },
     { name = "pydantic" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 
 [package.dev-dependencies]
@@ -702,10 +703,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "datafog-core", specifier = ">=0.4.1,<0.5" },
+    { name = "datafog-core", specifier = ">=0.4.2,<0.5" },
     { name = "fastmcp", specifier = ">=3,<4" },
     { name = "mcp", specifier = ">=1.2.0" },
     { name = "pydantic", specifier = ">=2,<3" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2" },
 ]
 
 [package.metadata.requires-dev]

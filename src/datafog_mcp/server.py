@@ -20,7 +20,8 @@ from datafog_mcp.findings import (
     render,
     render_transformation,
 )
-from datafog_mcp.paths import PathNotAllowed
+from datafog_mcp.paths import PathNotAllowed, resolve_output
+from datafog_mcp.policy import OutputPolicyError, load_output_policy
 from datafog_mcp.reader import (
     ReadError,
     WriteError,
@@ -29,6 +30,8 @@ from datafog_mcp.reader import (
 )
 
 if TYPE_CHECKING:
+    from datafog_core import _ScanConfig
+
     EntityType = str
 else:
     # Built from the engine's own list, so the schema cannot drift from what a
@@ -38,7 +41,7 @@ else:
 # Omit for the default set. An empty list asks for nothing, so the schema
 # declares it invalid rather than reading it as the default.
 EntitySelection = Annotated[list[EntityType], Field(min_length=1)] | None
-InputFormat = Literal["auto", "text", "csv", "tsv"]
+InputFormat = Literal["auto", "text", "csv", "tsv", "env", "sql"]
 
 mcp = FastMCP(
     name="datafog",
@@ -46,9 +49,12 @@ mcp = FastMCP(
     mask_error_details=True,
     instructions=(
         "Local PII and credential detection and transformation. Scans "
-        "files on disk for emails, phone numbers, SSNs, credit card "
-        "numbers, dates, ZIP codes, bank routing numbers, NPIs, API "
-        "keys, tokens, and private keys, and can write a transformed "
+        "files on disk for emails, SSNs, credit card numbers, labeled "
+        "bank routing numbers and NPIs, GitHub and Stripe API keys, "
+        "bearer tokens, JWTs, PostgreSQL connection strings with a password, "
+        "and PEM private keys. Dates, ZIP codes, phone numbers, and IP "
+        "addresses require an explicit entity_types selection. Plain-text "
+        "names and street addresses are not detected. It can write a transformed "
         "copy. File contents are processed on this machine and never "
         "included in tool responses."
     ),
@@ -106,6 +112,25 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
         raise ToolError(str(exc)) from exc
 
 
+def _core_scan_config(path: Path, input_format: InputFormat) -> _ScanConfig:
+    """Select Core's email boundaries without changing other detector settings.
+
+    Auto recognizes .env, .env.*, *.env, and *.sql filenames, ignoring case.
+    Other files retain plain-text boundaries, including CSV and TSV files.
+    An explicit format overrides the filename.
+    """
+    if input_format in ("text", "env", "sql"):
+        return {"format": input_format}
+    if input_format in ("csv", "tsv"):
+        return {"format": "text"}
+    name = path.name.lower()
+    if name == ".env" or name.startswith(".env.") or name.endswith(".env"):
+        return {"format": "env"}
+    if name.endswith(".sql"):
+        return {"format": "sql"}
+    return {"format": "text"}
+
+
 @mcp.tool
 async def datafog_scan(
     path: str,
@@ -139,21 +164,32 @@ async def datafog_scan(
     are binary and are not parsed. A refusal is not a clean result: the file
     was not checked.
 
-    It also detects common credentials - API keys, bearer tokens, JWTs,
-    credentials embedded in URIs, and PEM private keys - but is not a
-    substitute for a dedicated secret scanner. A clean result means none of
-    these detectors matched, not that the file holds no secrets.
+    It also detects some credentials: GitHub tokens and Stripe secret and
+    restricted keys, tokens in Authorization: Bearer headers, JWTs, PostgreSQL
+    connection strings with a password, and complete PEM private-key blocks.
+    Other providers' keys, such as AWS, and other URI schemes, such as MySQL
+    or Redis, are not detected. It is not a substitute for a dedicated secret
+    scanner. A clean result means none of the selected detectors matched,
+    not that the file holds no sensitive data or secrets. Plain-text names
+    and street addresses are not detected.
+
+    Routing numbers and NPIs are found only after a label such as "Routing
+    number:" or "NPI:". CSV/TSV headers supply this label context. Bare
+    values in plain text can be missed or reported as another type.
 
     Parameters:
       path: The path of the file to scan.
       mode: What to return. Only "findings" is available: the type and
       offsets of each detected entity.
       entity_types: The types to look for. Defaults to API_KEY, BEARER_TOKEN,
-      CREDENTIAL_URI, CREDIT_CARD, DATE, EMAIL, JWT, NPI, PHONE, PRIVATE_KEY,
-      SSN, US_ROUTING_NUMBER, and ZIP_CODE. IP_ADDRESS is available on
-      request. Omit for the defaults; an empty list is refused.
-      input_format: auto parses .csv/.tsv by extension; text forces flat scanning.
-      csv and tsv explicitly select comma or tab tables for any filename.
+      CREDENTIAL_URI, CREDIT_CARD, EMAIL, JWT, NPI, PRIVATE_KEY, SSN, and
+      US_ROUTING_NUMBER. DATE, ZIP_CODE, PHONE, and IP_ADDRESS are available
+      on request. An explicit list replaces the defaults; an empty list is refused.
+      input_format: auto parses .csv/.tsv as tables, uses env email boundaries
+      for .env/.env.*/*.env and sql boundaries for *.sql (case-insensitive),
+      and text otherwise. csv, tsv, env, sql, and text override the filename.
+      ENV assignments and SQL quotes are preserved. SQL backslash escapes,
+      dollar quoting, and encoded email characters are not interpreted.
       has_header: For tables, preserve the first record as header context (default).
       Set false for headerless files or to scan/transform every record as data.
     Returns:
@@ -218,7 +254,7 @@ async def _transform_to_file(
 
     Parameters:
       path: The file to read.
-      output_path: Where to write, or None for a sibling of the input.
+      output_path: Destination path within the policy's directory, or None for the default name.
       entity_types: The types to transform, or None for the default.
       strategy: One of redact, mask, or remove.
       input_format: Explicit file format or automatic extension selection.
@@ -233,13 +269,25 @@ async def _transform_to_file(
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
+    try:
+        copy_policy = load_output_policy()
+    except OutputPolicyError as exc:
+        raise ToolError(str(exc)) from None
+
     source = content.path
     suffix = _OUTPUT_SUFFIXES[strategy]
+    # Hidden inputs remain readable, but copies must never create dotfiles.
+    output_stem = source.stem.lstrip(".") or "copy"
     destination = (
         Path(output_path)
         if output_path
-        else source.with_name(f"{source.stem}_{suffix}{source.suffix}")
+        else (copy_policy.directory or source.parent) / f"{output_stem}_{suffix}{source.suffix}"
     )
+
+    try:
+        destination = resolve_output(str(destination), source, copy_policy)
+    except PathNotAllowed as exc:
+        raise ToolError(str(exc)) from None
 
     try:
         result = await asyncio.to_thread(
@@ -249,7 +297,7 @@ async def _transform_to_file(
         raise ToolError(str(exc)) from None
 
     try:
-        written = write_text_file(destination, result.text, beside=source)
+        written = write_text_file(destination, result.text, beside=source, copy_policy=copy_policy)
     except (WriteError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
@@ -285,12 +333,15 @@ async def datafog_redact(
 
     Parameters:
       path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
-      output_path: Where to write. Defaults to a sibling of the input with a
-      _redacted suffix.
+      output_path: Destination path within the owner-configured output directory,
+      or beside the input if none is configured. Defaults to name_redacted.ext.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
-      input_format: auto parses .csv/.tsv by extension; text forces flat scanning.
-      csv and tsv explicitly select comma or tab tables for any filename.
+      input_format: auto parses .csv/.tsv as tables, uses env email boundaries
+      for .env/.env.*/*.env and sql boundaries for *.sql (case-insensitive),
+      and text otherwise. csv, tsv, env, sql, and text override the filename.
+      ENV assignments and SQL quotes are preserved. SQL backslash escapes,
+      dollar quoting, and encoded email characters are not interpreted.
       has_header: Preserve the first table record as header context (default).
       Set false for headerless files or to process every record as data.
     Returns:
@@ -330,12 +381,15 @@ async def datafog_mask(
 
     Parameters:
       path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
-      output_path: Where to write. Defaults to a sibling of the input with
-      a _masked suffix.
+      output_path: Destination path within the owner-configured output directory,
+      or beside the input if none is configured. Defaults to name_masked.ext.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
-      input_format: auto parses .csv/.tsv by extension; text forces flat scanning.
-      csv and tsv explicitly select comma or tab tables for any filename.
+      input_format: auto parses .csv/.tsv as tables, uses env email boundaries
+      for .env/.env.*/*.env and sql boundaries for *.sql (case-insensitive),
+      and text otherwise. csv, tsv, env, sql, and text override the filename.
+      ENV assignments and SQL quotes are preserved. SQL backslash escapes,
+      dollar quoting, and encoded email characters are not interpreted.
       has_header: Preserve the first table record as header context (default).
       Set false for headerless files or to process every record as data.
     Returns:
@@ -376,12 +430,15 @@ async def datafog_remove(
 
     Parameters:
       path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
-      output_path: Where to write. Defaults to a sibling of the input with
-      a _removed suffix.
+      output_path: Destination path within the owner-configured output directory,
+      or beside the input if none is configured. Defaults to name_removed.ext.
       entity_types: The types to delete. Defaults to the same types as
       datafog_scan; an empty list is refused.
-      input_format: auto parses .csv/.tsv by extension; text forces flat scanning.
-      csv and tsv explicitly select comma or tab tables for any filename.
+      input_format: auto parses .csv/.tsv as tables, uses env email boundaries
+      for .env/.env.*/*.env and sql boundaries for *.sql (case-insensitive),
+      and text otherwise. csv, tsv, env, sql, and text override the filename.
+      ENV assignments and SQL quotes are preserved. SQL backslash escapes,
+      dollar quoting, and encoded email characters are not interpreted.
       has_header: Preserve the first table record as header context (default).
       Set false for headerless files or to process every record as data.
     Returns:
@@ -411,10 +468,14 @@ def _process_file(
     if selected == "auto":
         selected = {".csv": "csv", ".tsv": "tsv"}.get(source.suffix.lower(), "text")
 
+    core_config: _ScanConfig = _core_scan_config(source, input_format)
+    if selected in ("csv", "tsv"):
+        core_config = {"format": "text"}
+
     def process(text: str, value_start: int) -> CellResult:
         found = [
             item
-            for item in scan(text)
+            for item in scan(text, core_config)
             if config.keeps(item.entity_type)
             and value_start <= item.codepoint_range.start < item.codepoint_range.end <= len(text)
         ]
