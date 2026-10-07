@@ -6,6 +6,7 @@ from datafog_core import Transformation, scan, transform
 
 from datafog_mcp.config import transform_config
 from datafog_mcp.findings import (
+    MAX_LISTED_FINDINGS,
     counts_by_type,
     finding_to_dict,
     render,
@@ -63,6 +64,43 @@ def test_render_findings() -> None:
     assert result["entity_count"] == 2
     assert result["counts"] == {"EMAIL": 1, "DATE": 1}
     assert len(result["findings"]) == 2
+
+
+def _emails(count: int) -> str:
+    """
+    Make text holding a number of distinct email addresses.
+
+    Parameters:
+      count: How many addresses.
+    Returns:
+      The addresses, one per line.
+    """
+    return "".join(f"user{i}@example.com\n" for i in range(count))
+
+
+def test_render_lists_findings_up_to_the_limit() -> None:
+    """At exactly the limit, every finding is listed."""
+    result = render("findings", _resolved(_emails(MAX_LISTED_FINDINGS)), "/tmp/a.csv")
+
+    assert result["findings_listed"] is True
+    assert len(result["findings"]) == MAX_LISTED_FINDINGS
+
+
+def test_render_omits_locations_above_the_limit() -> None:
+    """
+    Past the limit, locations are dropped but the counts stay complete.
+
+    The list is emptied rather than cut short, so a partial list can't be
+    mistaken for the whole file.
+    """
+    over = MAX_LISTED_FINDINGS + 1
+    result = render("findings", _resolved(_emails(over)), "/tmp/a.csv")
+
+    assert result["findings_listed"] is False
+    assert result["findings"] == []
+    assert result["entity_count"] == over
+    assert result["counts"] == {"EMAIL": over}
+    assert result["findings_limit"] == MAX_LISTED_FINDINGS
 
 
 def test_render_clean_file() -> None:

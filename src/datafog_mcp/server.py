@@ -190,7 +190,10 @@ async def datafog_scan(
       dollar quoting, and encoded email characters are not interpreted.
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
-      detected entities.
+      type and offsets of each detected entity. Offsets are listed for up to
+      1,200 entities. Above that, findings is empty and findings_listed is
+      false; the count and tally are still complete. To get offsets for a
+      dense file, scan again with fewer entity_types.
     """
     with _contained():
         return await _scan_file(path, mode, entity_types, input_format)

@@ -11,6 +11,7 @@ import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
+from datafog_mcp.findings import MAX_LISTED_FINDINGS
 from datafog_mcp.paths import ALLOWED_ROOTS_VAR
 from datafog_mcp.server import mcp
 
@@ -216,3 +217,39 @@ def test_narrowing_keeps_the_requested_type(tmp_path: Path) -> None:
     result = _scan_text(tmp_path, "Provider NPI: 1234567893\n", entity_types=["PHONE"])
 
     assert result["counts"] == {"PHONE": 1}
+
+
+def test_dense_file_returns_counts_without_locations(tmp_path: Path) -> None:
+    """
+    A file with more findings than the limit still reports every one in its counts.
+
+    Parameters:
+      tmp_path: Directory for the input.
+    """
+    over = MAX_LISTED_FINDINGS + 1
+    text = "".join(f"user{i}@example.com\n" for i in range(over))
+    result = _scan_text(tmp_path, text)
+
+    assert result["counts"] == {"EMAIL": over}
+    assert result["findings"] == []
+    assert result["findings_listed"] is False
+
+
+def test_full_listing_fits_the_context_budget(tmp_path: Path) -> None:
+    """
+    The largest listed response stays under Claude Code's 25,000-token cap.
+
+    The worst case is the longest type name with offsets late in the file, so
+    the findings are PostgreSQL URIs after a megabyte of filler. Three
+    characters per token overestimates.
+
+    Parameters:
+      tmp_path: Directory for the input.
+    """
+    filler = "x" * 999_000 + "\n"
+    uris = "".join(f"postgres://app:pw{i}@db.example.com/x\n" for i in range(MAX_LISTED_FINDINGS))
+    result = _scan_text(tmp_path, filler + uris)
+
+    assert result["counts"] == {"CREDENTIAL_URI": MAX_LISTED_FINDINGS}
+    assert result["findings_listed"] is True
+    assert len(json.dumps(result)) // 3 < 25_000

@@ -13,6 +13,12 @@ from datafog_core import TextRange
 # here is a promise to the agent; add one only alongside its implementation.
 Mode = Literal["findings"]
 
+# Each listed finding costs 12 to 19 tokens of the agent's context, depending
+# on the length of its type name. Claude Code truncates tool output at 25,000
+# tokens, and 1,200 findings of the longest type stay under that. Counts are
+# always complete.
+MAX_LISTED_FINDINGS = 1200
+
 
 class Labeled(Protocol):
     """
@@ -90,6 +96,12 @@ def render(
     """
     Build the tool response for a completed scan.
 
+    Locations are listed only when there are at most MAX_LISTED_FINDINGS.
+    Above that, the list is empty and findings_listed is false, so a dense
+    file can't overflow the agent's context, while the counts stay complete.
+    Leaving the list empty, rather than listing the first few hundred, keeps a
+    partial list from being mistaken for a complete one.
+
     Parameters:
       mode: The requested return mode.
       findings: Detections, with overlapping matches already resolved.
@@ -97,12 +109,15 @@ def render(
     Returns:
       A dict representing what was found, shaped by the mode.
     """
+    listed = len(findings) <= MAX_LISTED_FINDINGS
     return {
         "path": path,
         "mode": mode,
         "entity_count": len(findings),
         "counts": counts_by_type(findings),
-        "findings": [finding_to_dict(item) for item in findings],
+        "findings": [finding_to_dict(item) for item in findings] if listed else [],
+        "findings_listed": listed,
+        "findings_limit": MAX_LISTED_FINDINGS,
     }
 
 
