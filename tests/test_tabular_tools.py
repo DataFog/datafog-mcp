@@ -7,12 +7,14 @@ import csv
 import io
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
+from datafog_mcp import paths, policy
 from datafog_mcp.server import mcp
 
 EMAIL = "person@example.com"
@@ -169,3 +171,97 @@ def test_headers_supply_npi_and_routing_context(tool: str, tmp_path: Path) -> No
         assert "1234567893" not in output
         assert "021000021" not in output
     assert source.read_text(encoding="utf-8") == text
+
+
+@pytest.mark.parametrize("tool", TOOLS[1:])
+@pytest.mark.parametrize("extension,delimiter", [(".csv", ","), (".tsv", "\t")])
+def test_configured_table_copies_preserve_security_defaults_and_exact_disk_bytes(
+    tool: str,
+    extension: str,
+    delimiter: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / f".input{extension}"
+    text = f"email{delimiter}notes\r\n{EMAIL}{delimiter}José 2026-10-05 90210 +1 (415) 555-0123\r\n"
+    source.write_bytes(text.encode("utf-8"))
+    copies = tmp_path / "copies"
+    copies.mkdir()
+    configuration = tmp_path / "configuration"
+    configuration.mkdir()
+    location = configuration / "policy.toml"
+    location.write_text(
+        f'version = 1\n[output]\ndirectory = "{copies.as_posix()}"\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(policy, "POLICY_FILE", location)
+    monkeypatch.setattr(paths, "ROOTS_FILE", configuration / "allowed_roots")
+
+    replacement = {
+        "datafog_redact": "[EMAIL]",
+        "datafog_mask": "*" * len(EMAIL),
+        "datafog_remove": "",
+    }[tool]
+    expected = text.replace(EMAIL, '"' + replacement + '"').encode("utf-8")
+    # Simulate Windows' line separator: newline="" must neither expand the
+    # writer's bytes nor inflate the free-space requirement for existing CRLF.
+    monkeypatch.setattr("datafog_mcp.reader.os.linesep", "\r\n")
+    monkeypatch.setattr(
+        "datafog_mcp.reader.shutil.disk_usage", lambda _: SimpleNamespace(free=len(expected))
+    )
+    result = call(tool, source, entity_types=None)
+    written = Path(result["output_path"])
+    assert written.parent == copies.resolve()
+    assert not written.name.startswith(".")
+    assert written.read_bytes() == expected
+    assert result["counts"] == {"EMAIL": 1}
+    assert source.read_bytes() == text.encode("utf-8")
+    assert rows(expected.decode("utf-8"), delimiter)[1][0] == replacement
+
+    with pytest.raises(ToolError, match="must not begin with a dot"):
+        call(tool, source, output_path=str(copies / ".profile"))
+    with pytest.raises(ToolError, match="configured output directory"):
+        call(tool, source, output_path=str(tmp_path / "escape.txt"))
+    assert not (copies / ".profile").exists()
+    assert not (tmp_path / "escape.txt").exists()
+
+    monkeypatch.setattr(
+        "datafog_mcp.reader.shutil.disk_usage", lambda _: SimpleNamespace(free=len(expected) - 1)
+    )
+    target = copies / "too-large.txt"
+    with pytest.raises(ToolError, match="not enough free space"):
+        call(tool, source, entity_types=None, output_path=str(target))
+    assert not target.exists()
+    assert written.read_bytes() == expected
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+@pytest.mark.parametrize("filename", [".env", "contacts.sql"])
+def test_explicit_table_format_overrides_env_sql_filename(
+    tool: str, filename: str, tmp_path: Path
+) -> None:
+    source = tmp_path / filename
+    address = "customer=tag@example.com"
+    text = f"email\n{address}\n"
+    source.write_text(text, encoding="utf-8")
+    result = call(tool, source, input_format="csv")
+    assert result["counts"] == {"EMAIL": 1}
+    assert address not in json.dumps(result)
+    if tool == "datafog_scan":
+        assert result["findings"] == [
+            {
+                "type": "EMAIL",
+                "start": len("email\n"),
+                "end": len("email\n") + len(address),
+                "record": 1,
+                "column": 1,
+            }
+        ]
+    else:
+        replacement = {
+            "datafog_redact": "[EMAIL]",
+            "datafog_mask": "*" * len(address),
+            "datafog_remove": "",
+        }[tool]
+        output = Path(result["output_path"])
+        assert rows(output.read_text(encoding="utf-8"), ",") == [["email"], [replacement]]
+        assert source.read_text(encoding="utf-8") == text

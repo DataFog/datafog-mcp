@@ -10,6 +10,8 @@ Detection runs locally on the [datafog-core](https://github.com/DataFog/datafog-
 
 The guarantee holds when a tool fails, too. An unexpected error returns only its type, such as `datafog failed with RuntimeError`, and its details are kept out of both the response and the server's log.
 
+These checks are advisory and reduce exposure; they do not de-identify data or enforce an agent's file access. They complement enterprise data-loss-prevention (DLP) and endpoint controls rather than replace them. Plain-text names and street addresses are not detected by this installation.
+
 What responses do carry:
 
 - **Paths.** Every response names the files it read and wrote, and errors name the path they refused. A filename like `jane_doe_lab_results.csv` identifies a person on its own.
@@ -38,6 +40,8 @@ claude mcp add --scope user datafog -- ~/.local/bin/datafog-mcp
 
 Bare `datafog-mcp` runs the server over stdio; `datafog-mcp serve` is the same thing spelled out.
 
+The client must be able to launch this executable and access files on this machine. A cloud-hosted agent cannot reach this local stdio server directly. The Claude Code instructions above do not establish support for other clients; those need separate integration testing.
+
 ## Tools
 
 Every tool takes a path and returns a path. None returns file contents or matched values.
@@ -49,27 +53,39 @@ Every tool takes a path and returns a path. None returns file contents or matche
 | `datafog_mask` | Covers each value character for character, preserving decoded value length | `name_masked.ext` |
 | `datafog_remove` | Deletes each value outright, leaving no marker | `name_removed.ext` |
 
-The write tools create a sibling of the input and never modify the original. An existing file at the destination is never overwritten. `output_path` can name the file but not move it to another directory.
+The write tools never modify the original. By default they create a sibling of the input. You can choose a fixed output directory in `policy.toml` during setup (see below). An existing file at the destination is never overwritten. `output_path` can choose a filename within that directory, but cannot select another allowed root or a subdirectory. Output filenames beginning with `.` are refused, including missing shell startup files such as `.profile`. Hidden inputs remain scannable; default copies strip leading dots from the input stem (for example, `.env` becomes `env_redacted`).
 
 A copy gets the input's permissions, minus any execute bits, so a file only you can read produces a copy only you can read. A copy can still hold values the detectors missed, so it is never made more readable than its source. If a write fails partway, the incomplete copy is deleted.
 
+Before creating a copy, the server checks the destination filesystem has space for the transformed UTF-8 output. Insufficient space, or an unavailable free-space check, refuses the write. This checks available capacity at that moment; it does not reserve space or account for disk quotas. A later write failure still removes the incomplete copy.
+
 Detected by default:
 
-- **Personal data** — `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `DATE`, `ZIP_CODE`
+- **Personal data** — `EMAIL`, `SSN`, `CREDIT_CARD`
 - **Financial and health identifiers** — `US_ROUTING_NUMBER`, `NPI`
 - **Credentials** — `API_KEY`, `BEARER_TOKEN`, `JWT`, `CREDENTIAL_URI`, `PRIVATE_KEY`
 
-`IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set, or omit it for the defaults. Any other type is refused, and so is an empty list, which would select nothing.
+`DATE`, `ZIP_CODE`, `PHONE`, and `IP_ADDRESS` are available but off by default. Dates, ZIP codes, and phone numbers can match operational timestamps or numeric IDs, so enable them when that coverage is needed. A default scan does not check these types, and a default write leaves their values unchanged unless another selected detector also matches them.
 
-Credential detection covers common formats. It is not a substitute for a dedicated secret scanner, and a clean result is not proof a file holds no secrets.
+Pass `entity_types` to choose the types to check or transform, or omit it for the defaults. An explicit list **replaces** the defaults; it does not add to them. For example, `{"path": "/absolute/path/export.csv", "entity_types": ["EMAIL", "PHONE", "DATE", "ZIP_CODE"]}` checks only those four types. Include every default type you still want when opting into another type. Unsupported types and an empty list are refused.
+
+Some types are narrower than their names suggest:
+
+- **`US_ROUTING_NUMBER` and `NPI`** are found only after a label, such as `Routing number:` or `NPI:`. Table headers supply this label context; bare values in plain text can be missed or reported as another type.
+- **`API_KEY`** covers GitHub tokens and Stripe secret and restricted keys. Keys from other providers, such as AWS, are not detected.
+- **`BEARER_TOKEN`** is the token in an `Authorization: Bearer` header.
+- **`CREDENTIAL_URI`** covers PostgreSQL connection strings that include a password (`postgres://` or `postgresql://`). Other schemes, such as MySQL, Redis, or MongoDB, are not detected.
+- **`PRIVATE_KEY`** is a complete PEM private-key block. Public keys and certificates are not reported.
+
+Credential detection is not a substitute for a dedicated secret scanner. A clean result means none of the selected detectors matched; it is not proof a file holds no sensitive data or secrets.
 
 ## Supported files
 
-UTF-8 text, up to 1 MiB (1,048,576 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. CSV/TSV files are scanned as decoded cells; other files are scanned as flat text.
+UTF-8 text, up to 1 MiB (1,048,576 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. CSV/TSV files are scanned as decoded cells; ENV/SQL files use their email boundary rules, and other files use plain-text matching.
 
 ### CSV and TSV
 
-All four tools accept `input_format`: `auto` (default) selects comma-separated CSV for `.csv` and tab-separated TSV for `.tsv`, ignoring extension case; other extensions use plain text. Choose `csv` or `tsv` explicitly for another filename, or `text` to force flat scanning.
+All four tools accept `input_format`: `auto` (default) selects comma-separated CSV for `.csv` and tab-separated TSV for `.tsv`, ignoring extension case; ENV/SQL filenames select their email boundary rules as described below; other extensions use plain text. Choose `csv`, `tsv`, `env`, or `sql` explicitly for another filename, or `text` to force flat scanning.
 
 The first record is a header by default (`has_header=true`). It supplies context for label-sensitive detectors such as NPI and routing numbers, and is preserved without scanning or transforming its contents. Set `has_header=false` for headerless files, or when the first record may itself contain sensitive values that need processing. Header presence is never guessed.
 
@@ -78,6 +94,10 @@ Scan findings add numeric `record` and `column` fields, both one-based; record 1
 Writes preserve the delimiter, record/column structure, headers, BOM, line endings, and untouched cell syntax. Changed cells are quoted and embedded double quotes escaped; removing the sole value in a one-column record writes `""` rather than a blank line. Masking preserves decoded value length, but added CSV quotes can change the serialized file length.
 
 This supports comma/tab delimiters and double-quote escaping, including quoted multiline values and duplicate or empty headers. Unterminated quotes, quotes inside unquoted fields, trailing text after quoted fields, inconsistent column counts, and blank records are refused with a content-free error. Empty and header-only files are valid. Other delimiters and backslash escaping require conversion or an explicit plain-text scan; plain-text transformation does not guarantee table structure.
+
+Email matching uses format-specific boundaries in ENV and SQL files. With the default `input_format="auto"`, `.env`, `.env.*`, and `*.env` filenames select ENV boundaries; `*.sql` selects SQL boundaries, ignoring filename case. CSV and TSV use plain-text email boundaries within each decoded cell. Other files use plain-text boundaries. All four tools accept an explicit `input_format` of `env`, `sql`, or `text` to override the filename.
+
+For example, an ENV copy preserves `EMAIL=` and surrounding quotes while transforming the address; a SQL copy preserves the quotes surrounding a string value. Scan offsets refer to the email's span in the original file, including doubled SQL quotes within the address, using Unicode character positions. This is not a full ENV or SQL parser: SQL backslash escapes, dollar quoting, and encoded email characters are not interpreted.
 
 Refused with an error, never scanned:
 
@@ -109,6 +129,28 @@ Always refused, even inside a root: `.ssh`, `.gnupg`, `.aws`, `.kube`, `gcloud`.
 
 A refused path returns a tool error naming the roots in force, or why the policy can't be used.
 
+### Choose where copies go
+
+During setup, create the directory where you want cleaned copies and include both the input directory and output directory in your allowed roots. Then edit the copy policy:
+
+```bash
+datafog-mcp policy --edit  # create a private template and open it in $EDITOR
+datafog-mcp policy        # show the configured copy destination
+```
+
+The file is `~/.config/datafog/policy.toml`:
+
+```toml
+version = 1
+
+[output]
+directory = "~/Documents/datafog-copies"
+```
+
+The directory must already exist and be an absolute path or start with `~`. The server creates files directly inside it, retaining the usual `_redacted`, `_masked`, or `_removed` names. It never creates directories automatically. Setting this destination grants no additional access: allowed roots, credential-directory denials, and the configuration-directory write refusal still apply. If two inputs produce the same output name, use an explicit destination path inside the configured directory; existing copies are never overwritten.
+
+Edits take effect on the next write request. A missing policy file uses sibling copies. A valid file containing just `version = 1` also explicitly selects sibling copies. An empty, malformed, unreadable, or unsupported policy refuses writes rather than falling back. This version supports only `version` and `[output].directory`; broader workflow settings will be added separately. Scans do not depend on the copy policy.
+
 ## Uninstall
 
 Remove the registration first. If the program goes first, Claude Code fails to start `datafog` in every session (`ENOENT`) until the registration is removed too.
@@ -122,16 +164,19 @@ Then remove the configuration, if you created it with `datafog-mcp roots --edit`
 
 ```bash
 rm ~/.config/datafog/allowed_roots
-rmdir ~/.config/datafog
 ```
+
+The optional `~/.config/datafog/policy.toml` stores your copy destination. Keep it for reinstalling, or remove it separately if you want to discard that setting. Removing it does not delete any copies.
+
+If you remove both configuration files, `rmdir ~/.config/datafog` removes the now-empty directory.
 
 If you set `DATAFOG_MCP_ALLOWED_ROOTS` in your shell profile, remove it there.
 
-That removes everything the server itself created. It keeps no cache, log, or data directory of its own.
+The server keeps no cache, log, or data directory of its own.
 
 Two things remain, on purpose:
 
-- **Copies the tools wrote.** These are your files, saved beside their originals with `_redacted`, `_masked`, or `_removed` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
+- **Copies the tools wrote.** These are your files, saved beside their originals or in your configured output directory with `_redacted`, `_masked`, or `_removed` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
 
   ```bash
   find ~ \( -name '*_redacted.*' -o -name '*_masked.*' -o -name '*_removed.*' \) -type f
