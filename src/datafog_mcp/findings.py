@@ -14,11 +14,10 @@ from datafog_core import TextRange
 # here is a promise to the agent; add one only alongside its implementation.
 Mode = Literal["findings"]
 
-# Each listed finding costs 12 to 19 tokens of the agent's context, depending
-# on the length of its type name. Claude Code truncates tool output at 25,000
-# tokens, and 1,200 findings of the longest type stay under that. Counts are
-# always complete.
-MAX_LISTED_FINDINGS = 1200
+# Keep even table locations with wide numeric coordinates below the 25,000-token
+# response budget using the benchmark's conservative three-character estimate.
+# Counts stay complete when the listing is omitted.
+MAX_LISTED_FINDINGS = 700
 
 
 @dataclass(frozen=True)
@@ -112,8 +111,8 @@ def render(
     Build the tool response for a completed scan.
 
     Locations are listed only when there are at most MAX_LISTED_FINDINGS.
-    Above that, the list is empty and findings_listed is false, so a dense
-    file can't overflow the agent's context, while the counts stay complete.
+    Above that, the list is empty and findings_listed is false, bounding
+    location output while the counts stay complete.
     Leaving the list empty, rather than listing the first few hundred, keeps a
     partial list from being mistaken for a complete one.
 

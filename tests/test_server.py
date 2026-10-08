@@ -253,3 +253,88 @@ def test_full_listing_fits_the_context_budget(tmp_path: Path) -> None:
     assert result["counts"] == {"CREDENTIAL_URI": MAX_LISTED_FINDINGS}
     assert result["findings_listed"] is True
     assert len(json.dumps(result)) // 3 < 25_000
+
+
+@pytest.mark.parametrize("delimiter", [",", "\t"], ids=["csv", "tsv"])
+@pytest.mark.parametrize("extra", [0, 1], ids=["at-limit", "above-limit"])
+def test_table_scan_listing_boundary(tmp_path: Path, delimiter: str, extra: int) -> None:
+    """Table scans retain full counts and list complete locations or none."""
+    count = MAX_LISTED_FINDINGS + extra
+    suffix = ".csv" if delimiter == "," else ".tsv"
+    source = tmp_path / ("input" + suffix)
+    source.write_text(
+        "padding" + delimiter + "Routing number\n" + ("x" + delimiter + "021000021\n") * count
+    )
+    result = _call(path=str(source))
+    assert result["counts"] == {"US_ROUTING_NUMBER": count}
+    assert result["entity_count"] == count
+    assert result["findings_limit"] == MAX_LISTED_FINDINGS
+    assert result["findings_listed"] is (extra == 0)
+    if extra:
+        assert result["findings"] == []
+    else:
+        assert len(result["findings"]) == count
+        assert result["findings"][0]["record"] == 1
+        assert result["findings"][-1]["record"] == count
+        assert {item["column"] for item in result["findings"]} == {2}
+    assert "021000021" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("input_format", ["text", "csv", "tsv"])
+def test_full_mcp_text_listing_fits_response_budget(tmp_path: Path, input_format: str) -> None:
+    """Measure the actual MCP text content, including table location fields."""
+    source = tmp_path / ("budget." + input_format)
+    if input_format == "text":
+        source.write_text(
+            "x" * 950_000 + "\n" + "Routing number: 021000021\n" * MAX_LISTED_FINDINGS
+        )
+    else:
+        delimiter = "," if input_format == "csv" else "\t"
+        source.write_text(
+            "padding"
+            + delimiter
+            + "Routing number\n"
+            + "x" * 950_000
+            + delimiter
+            + "\n"
+            + ("x" + delimiter + "021000021\n") * MAX_LISTED_FINDINGS
+        )
+
+    async def run() -> None:
+        async with Client(mcp) as client:
+            result = await client.call_tool("datafog_scan", {"path": str(source)})
+            data = result.structured_content or {}
+            assert data["findings_listed"] is True
+            assert data["counts"] == {"US_ROUTING_NUMBER": MAX_LISTED_FINDINGS}
+            assert len(data["findings"]) == MAX_LISTED_FINDINGS
+            text = "".join(getattr(item, "text", "") for item in result.content)
+            assert len(text) / 3 < 25_000
+            assert "021000021" not in text
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("delimiter", [",", "\t"], ids=["csv", "tsv"])
+@pytest.mark.parametrize("tool", ["redact", "mask", "remove"])
+def test_dense_table_copy_still_transforms_every_finding(
+    tmp_path: Path, delimiter: str, tool: str
+) -> None:
+    """The scan listing cutoff must not limit replacements in output copies."""
+    count = MAX_LISTED_FINDINGS + 1
+    suffix = ".csv" if delimiter == "," else ".tsv"
+    source = tmp_path / ("dense" + suffix)
+    source.write_text("email\n" + "jane@example.com\n" * count)
+
+    async def run() -> dict[str, Any]:
+        async with Client(mcp) as client:
+            result = await client.call_tool("datafog_" + tool, {"path": str(source)})
+            return result.structured_content or {}
+
+    result = asyncio.run(run())
+    assert result["entity_count"] == count
+    assert result["counts"] == {"EMAIL": count}
+    output = Path(result["output_path"]).read_text()
+    assert "jane@example.com" not in output
+    assert source.read_text().count("jane@example.com") == count
+    if tool == "redact":
+        assert output.count("[EMAIL]") == count

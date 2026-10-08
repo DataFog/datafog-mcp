@@ -198,7 +198,7 @@ async def datafog_scan(
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
       type and offsets of each detected entity. Offsets are listed for up to
-      1,200 entities. Above that, findings is empty and findings_listed is
+      700 entities. Above that, findings is empty and findings_listed is
       false; the count and tally are still complete. To get offsets for a
       dense file, scan again with fewer entity_types.
     """
