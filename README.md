@@ -190,6 +190,8 @@ For another MCP client, remove the `datafog` entry from that client's MCP config
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the changelog policy and exemption process.
 
+MCP passes its default or explicit `entity_types` to Core before scanning, including decoded CSV/TSV cells. Only selected detectors run. This requires datafog-core 0.4.3 or later.
+
 ```bash
 uv sync --group dev
 uv run pre-commit install

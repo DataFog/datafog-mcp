@@ -17,13 +17,13 @@ def _text_scan_entities() -> frozenset[str]:
     """
     Ask the engine which types a plain text scan can report.
 
-    Only default-activated, text-scoped types qualify. The server calls
-    scan(text) with no config, so a type that needs a locale, a config flag,
-    or structured input would never fire. Accepting one would let a caller
+    Only default-activated, text-scoped types qualify. Selecting a detector
+    does not activate a required locale or structured-input capability,
+    so types needing either would never fire. Accepting one would let a caller
     request it and get an empty result reported as success.
 
     Returns:
-      The entity types scan(text) can report.
+      The entity types a text scan can report.
     """
     return frozenset(
         name
