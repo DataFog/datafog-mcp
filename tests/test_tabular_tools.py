@@ -112,9 +112,7 @@ def test_headerless_tables_process_first_record(tool: str, tmp_path: Path) -> No
     [
         f'email\n"{EMAIL}',
         f'email\n"{EMAIL}"junk\n',
-        f"email\n{EMAIL},extra\n",
-        f"email\n{EMAIL}\n\n",
-        f'email\nun"quoted {EMAIL}\n',
+        f"email\n{EMAIL}\n\nvalue\n",
     ],
 )
 def test_malformed_table_never_writes_a_copy_or_returns_partial_results(
@@ -265,3 +263,128 @@ def test_explicit_table_format_overrides_env_sql_filename(
         output = Path(result["output_path"])
         assert rows(output.read_text(encoding="utf-8"), ",") == [["email"], [replacement]]
         assert source.read_text(encoding="utf-8") == text
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+@pytest.mark.parametrize("delimiter", [",", "\t"])
+@pytest.mark.parametrize("case", ["trailing-blanks", "short-row", "extra-cells", "literal-quote"])
+def test_tolerant_tables_preserve_existing_cells_and_locations(
+    tool: str, delimiter: str, case: str, tmp_path: Path
+) -> None:
+    header = f"name{delimiter}email{delimiter}notes\r\n"
+    records = {
+        "trailing-blanks": f"José{delimiter}{EMAIL}{delimiter}keep\r\n\r\n\n",
+        "short-row": f"José{delimiter}{EMAIL}\r\n",
+        "extra-cells": f"José{delimiter}keep{delimiter}keep{delimiter}{EMAIL}\r\n",
+        "literal-quote": f'José{delimiter}{EMAIL}{delimiter}55" screen\r\n',
+    }
+    text = "\ufeff" + header + records[case]
+    source = tmp_path / ("input.csv" if delimiter == "," else "input.tsv")
+    source.write_bytes(text.encode("utf-8"))
+    result = call(tool, source)
+    assert result["counts"] == {"EMAIL": 1}
+    assert source.read_bytes() == text.encode("utf-8")
+    if tool == "datafog_scan":
+        assert result["findings"] == [
+            {
+                "type": "EMAIL",
+                "start": text.index(EMAIL),
+                "end": text.index(EMAIL) + len(EMAIL),
+                "record": 1,
+                "column": 4 if case == "extra-cells" else 2,
+            }
+        ]
+    else:
+        replacement = {
+            "datafog_redact": "[EMAIL]",
+            "datafog_mask": "*" * len(EMAIL),
+            "datafog_remove": "",
+        }[tool]
+        output = Path(result["output_path"]).read_bytes().decode("utf-8")
+        assert output == text.replace(EMAIL, '"' + replacement + '"')
+        expected = rows(text, delimiter)
+        expected[1][3 if case == "extra-cells" else 1] = replacement
+        assert rows(output, delimiter) == expected
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_ragged_headers_supply_context_only_for_existing_columns(tool: str, tmp_path: Path) -> None:
+    source = tmp_path / "input.csv"
+    text = f"NPI,routing number\n1234567893\n,021000021,{EMAIL}\n"
+    source.write_text(text, encoding="utf-8")
+    result = call(tool, source, entity_types=["EMAIL", "NPI", "US_ROUTING_NUMBER"])
+    assert result["counts"] == {"NPI": 1, "US_ROUTING_NUMBER": 1, "EMAIL": 1}
+    if tool == "datafog_scan":
+        assert [(item["record"], item["column"]) for item in result["findings"]] == [
+            (1, 1),
+            (2, 2),
+            (2, 3),
+        ]
+    else:
+        output = rows(Path(result["output_path"]).read_text(encoding="utf-8"), ",")
+        assert [len(row) for row in output] == [2, 1, 3]
+        assert output[0] == ["NPI", "routing number"]
+    assert source.read_text(encoding="utf-8") == text
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+@pytest.mark.parametrize("delimiter", [",", "\t"])
+@pytest.mark.parametrize(
+    "bad_cell,reason", [('"unterminated', "unterminated"), ('"closed"junk', "unexpected character")]
+)
+def test_ambiguous_tables_report_location_and_safe_next_step(
+    tool: str, delimiter: str, bad_cell: str, reason: str, tmp_path: Path
+) -> None:
+    source = tmp_path / ("input.csv" if delimiter == "," else "input.tsv")
+    # A multiline field is one record, so the error is record 3, column 2.
+    text = f'email{delimiter}notes\n{EMAIL}{delimiter}"first\nsecond"\nkeep{delimiter}{bad_cell}'
+    source.write_text(text, encoding="utf-8")
+    with pytest.raises(ToolError) as excinfo:
+        call(tool, source)
+    message = str(excinfo.value)
+    assert "record 3, column 2" in message
+    assert reason in message
+    assert 'input_format="text"' in message
+    assert "plain-text copies do not guarantee table structure" in message
+    assert EMAIL not in message
+    assert bad_cell not in message
+    assert list(tmp_path.iterdir()) == [source]
+    assert source.read_text(encoding="utf-8") == text
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_quoted_tsv_tabs_and_multiline_cells_still_work(tool: str, tmp_path: Path) -> None:
+    text = f'email\tnotes\n{EMAIL}\t"55"" screen\twide\nsecond line"\n'
+    source = tmp_path / "input.tsv"
+    source.write_text(text, encoding="utf-8")
+    result = call(tool, source)
+    assert result["counts"] == {"EMAIL": 1}
+    if tool != "datafog_scan":
+        output = Path(result["output_path"]).read_text(encoding="utf-8")
+        assert rows(output, "\t")[1][1] == '55" screen\twide\nsecond line'
+        assert '"55"" screen\twide\nsecond line"' in output
+
+
+@pytest.mark.parametrize("tool", TOOLS[1:])
+@pytest.mark.parametrize("delimiter", [",", "\t"])
+def test_changed_unquoted_cells_escape_their_literal_quotes(
+    tool: str, delimiter: str, tmp_path: Path
+) -> None:
+    value = f'55" screen contact {EMAIL}'
+    source = tmp_path / ("input.csv" if delimiter == "," else "input.tsv")
+    text = f"notes{delimiter}keep\n{value}{delimiter}untouched\n"
+    source.write_text(text, encoding="utf-8")
+    result = call(tool, source)
+    replacement = {
+        "datafog_redact": "[EMAIL]",
+        "datafog_mask": "*" * len(EMAIL),
+        "datafog_remove": "",
+    }[tool]
+    output = Path(result["output_path"]).read_text(encoding="utf-8")
+    assert rows(output, delimiter) == [
+        ["notes", "keep"],
+        [value.replace(EMAIL, replacement), "untouched"],
+    ]
+    assert '55"" screen' in output
+    assert result["counts"] == {"EMAIL": 1}
+    assert source.read_text(encoding="utf-8") == text
