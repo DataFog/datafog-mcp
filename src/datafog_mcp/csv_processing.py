@@ -1,4 +1,4 @@
-"""Strict comma-separated CSV processing with original-source finding locations.
+"""Comma/tab table processing with original-source finding locations.
 
 Headers are explicit (on by default), not guessed. Cells are decoded before
 scanning and only changed cells are serialized; untouched syntax stays intact.
@@ -54,12 +54,21 @@ class _Cell:
 
 
 def _rows(text: str, delimiter: str) -> Iterator[list[_Cell]]:
-    width: int | None = None
+    record = 1
     row: list[_Cell] = []
     i = int(text.startswith("\ufeff"))
     length = len(text)
     if i == length:
         return
+
+    def malformed(reason: str) -> CsvError:
+        format_name = "CSV" if delimiter == "," else "TSV"
+        return CsvError(
+            f"Malformed {format_name} at record {record}, column {len(row) + 1}: {reason}. "
+            'Rerun with input_format="text" for a plain-text scan; '
+            "plain-text copies do not guarantee table structure."
+        )
+
     while True:
         start = i
         escapes: list[int] = []
@@ -85,28 +94,29 @@ def _rows(text: str, delimiter: str) -> Iterator[list[_Cell]]:
                 i += 1
                 break
             else:
-                raise CsvError("Malformed CSV: unterminated quoted field")
+                raise malformed("unterminated quoted field")
             value = "".join(pieces)
             if i < length and text[i] not in delimiter + "\r\n":
-                raise CsvError("Malformed CSV: unexpected character after quoted field")
+                raise malformed("unexpected character after quoted field")
         else:
             content_start = i
             while i < length and text[i] not in delimiter + "\r\n":
-                if text[i] == '"':
-                    raise CsvError("Malformed CSV: quote inside unquoted field")
                 i += 1
             value = text[start:i]
         row.append(_Cell(start, i, content_start, value, tuple(escapes)))
         if i < length and text[i] == delimiter:
             i += 1
             continue
-        # An empty physical record is ambiguous between zero and one cells.
+        # Trailing empty lines carry no cells. Preserve them in the source,
+        # but do not report them as data records. Interior blank records stay
+        # ambiguous between zero cells and a missing one-column value.
         if len(row) == 1 and row[0].start == row[0].end:
-            raise CsvError("Malformed CSV: blank records are unsupported")
-        if width is not None and len(row) != width:
-            raise CsvError("Malformed CSV: inconsistent column count")
-        width = len(row)
+            if not text[i:].strip("\r\n"):
+                return
+            row = []
+            raise malformed("interior blank records are unsupported")
         yield row
+        record += 1
         row = []
         if i == length:
             break
@@ -132,13 +142,16 @@ def process_csv(
     has_header: bool = True,
     delimiter: str = ",",
 ) -> CsvResult:
-    """Process strict comma/tab tables, preserving untouched source syntax.
+    """Process comma/tab tables, preserving untouched source syntax.
 
     Headers supply detection context but are excluded from matching and writes.
     The callback must retain the context and resolve only matches wholly inside
     the cell value. Locations are one-based data records and columns; offsets
     address the original raw source, including doubled quotes, BOM and CRLF.
-    Header text is never included in findings.
+    Ragged rows use corresponding headers where present; extra cells receive
+    no header context. Trailing blank lines and literal quotes in unquoted
+    cells are preserved. Error record numbers include the header, unlike finding
+    records, which count only data records. Header text is never returned.
     """
     if delimiter not in (",", "\t"):
         raise CsvError("Unsupported CSV delimiter: use comma or tab")
@@ -149,7 +162,7 @@ def process_csv(
     patches: list[tuple[int, int, str]] = []
     for record, row in enumerate(rows, 1):
         for column, cell in enumerate(row, 1):
-            header = headers[column - 1] if has_header else ""
+            header = headers[column - 1] if column <= len(headers) else ""
             prefix = f"{header}: " if header else ""
             result = process_cell(prefix + cell.value, len(prefix))
             if not result.text.startswith(prefix):

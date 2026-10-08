@@ -111,11 +111,9 @@ def test_headerless_empty_cells_and_remove_one_column_record() -> None:
 @pytest.mark.parametrize(
     "source",
     [
-        "a,b\n1\n",
         'a\n"unterminated',
         'a\n"closed"junk\n',
-        'a\nun"quoted\n',
-        "a\n\n",
+        "a\n\nvalue\n",
     ],
 )
 def test_malformed_csv_refused_without_echo(source: str) -> None:
