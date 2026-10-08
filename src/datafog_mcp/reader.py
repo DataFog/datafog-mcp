@@ -5,11 +5,13 @@ Safe file reading for scan and redaction requests.
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 from dataclasses import dataclass
 from pathlib import Path
 
 from .paths import resolve_input, resolve_output
+from .policy import OutputPolicy
 
 # Byte-order marks of encodings this server does not read. UTF-32 LE's mark
 # begins with UTF-16 LE's, so these three cover both widths and byte orders.
@@ -42,6 +44,10 @@ class WriteError(Exception):
 
 class FileExists(WriteError):
     """The destination already exists."""
+
+
+class InsufficientSpace(WriteError):
+    """The destination filesystem cannot hold the transformed copy."""
 
 
 @dataclass(frozen=True)
@@ -106,12 +112,15 @@ def read_text_file(path: str, max_bytes: int) -> FileContent:
     return FileContent(text=text, path=resolved, size_bytes=len(raw))
 
 
-def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
+def write_text_file(
+    path: str | Path, text: str, beside: Path, copy_policy: OutputPolicy | None = None
+) -> Path:
     """
     Write text to a file the server is allowed to create.
 
     Creates exclusively. Refuses to overwrite and refuses any destination
-    outside the directory of input it derives from.
+    outside the owner-configured output directory, or the input's directory
+    when none is configured. Checks free space before creating a copy.
 
     The copy takes the input's permission bits, less execute and special bits,
     and the umask can narrow them further. A copy may still hold identifiers
@@ -124,11 +133,25 @@ def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
       path: Destination path.
       text: Content to write.
       beside: The resolved input path bounding where output may go.
+      copy_policy: A request's output policy snapshot, or None to load it now.
     Returns:
       The resolved path that was written.
     """
-    resolved = resolve_output(str(path), beside)
+    resolved = resolve_output(str(path), beside, copy_policy)
     mode = stat.S_IMODE(beside.stat().st_mode) & 0o666
+
+    # Newline translation is disabled to preserve table line endings.
+    # Check exactly the transformed UTF-8 bytes that will be written.
+    required = len(text.encode("utf-8"))
+    try:
+        available = shutil.disk_usage(resolved.parent).free
+    except OSError:
+        raise WriteError("cannot check free space for the output directory") from None
+    if available < required:
+        raise InsufficientSpace(
+            f"not enough free space for the copy: needs {required} bytes, "
+            f"{available} bytes available"
+        )
 
     try:
         descriptor = os.open(resolved, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
@@ -137,7 +160,7 @@ def write_text_file(path: str | Path, text: str, beside: Path) -> Path:
 
     # From here the file is ours, so removing it on failure is safe
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
     except BaseException:
         resolved.unlink(missing_ok=True)
