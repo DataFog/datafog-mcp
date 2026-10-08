@@ -1,0 +1,60 @@
+name: Size benchmark
+
+# Manual only. Measures the tools on the reference runner the size budgets
+# assume, so results don't depend on whose laptop ran them.
+on:
+  workflow_dispatch:
+    inputs:
+      sizes:
+        description: "Sizes in MB, comma-separated"
+        default: "1,10,100"
+      formats:
+        description: "Formats, comma-separated"
+        default: "text,csv-narrow,csv-wide,json,sql"
+      repeats:
+        description: "Runs per cell"
+        default: "5"
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run the matrix
+        env:
+          SIZES: ${{ inputs.sizes }}
+          FORMATS: ${{ inputs.formats }}
+          REPEATS: ${{ inputs.repeats }}
+        run: >
+          uv run python scripts/benchmark_sizes.py matrix
+          --out results.jsonl --sizes "$SIZES" --formats "$FORMATS" --repeats "$REPEATS"
+          --workdir "$RUNNER_TEMP/bench"
+
+      - name: Summarize
+        if: always()
+        run: uv run python scripts/benchmark_sizes.py summarize results.jsonl >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-benchmark
+          path: results.jsonl
+          if-no-files-found: error
