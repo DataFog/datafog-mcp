@@ -140,9 +140,9 @@ def write_text_file(
     resolved = resolve_output(str(path), beside, copy_policy)
     mode = stat.S_IMODE(beside.stat().st_mode) & 0o666
 
-    # Text-mode writes translate newlines on Windows. Check the bytes that
-    # will actually be written, including any expansion from transformation.
-    required = len(text.replace("\n", os.linesep).encode("utf-8"))
+    # Newline translation is disabled to preserve table line endings.
+    # Check exactly the transformed UTF-8 bytes that will be written.
+    required = len(text.encode("utf-8"))
     try:
         available = shutil.disk_usage(resolved.parent).free
     except OSError:
@@ -160,7 +160,7 @@ def write_text_file(
 
     # From here the file is ours, so removing it on failure is safe
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
     except BaseException:
         resolved.unlink(missing_ok=True)

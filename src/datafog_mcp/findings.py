@@ -5,6 +5,7 @@ Rendering scan and transformation results for the datafog tools.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 from datafog_core import TextRange
@@ -12,6 +13,16 @@ from datafog_core import TextRange
 # The only mode built. The schema is generated from this, so a mode listed
 # here is a promise to the agent; add one only alongside its implementation.
 Mode = Literal["findings"]
+
+
+@dataclass(frozen=True)
+class CsvFinding:
+    """A content-free location in a table's original source text."""
+
+    entity_type: str
+    source_codepoint_range: TextRange
+    record: int
+    column: int
 
 
 class Labeled(Protocol):
@@ -75,11 +86,15 @@ def finding_to_dict(finding: Located) -> dict[str, Any]:
     Returns:
       A dict with the entity type and the span it occupies.
     """
-    return {
+    result: dict[str, Any] = {
         "type": finding.entity_type,
         "start": finding.source_codepoint_range.start,
         "end": finding.source_codepoint_range.end,
     }
+    # Only location metadata is exposed; headers themselves can contain PII.
+    if isinstance(finding, CsvFinding):
+        result.update(record=finding.record, column=finding.column)
+    return result
 
 
 def render(
