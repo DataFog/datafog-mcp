@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from datafog_core import Transformation, scan, transform
+import json
+
+from datafog_core import TextRange, Transformation, scan, transform
 
 from datafog_mcp.config import transform_config
 from datafog_mcp.findings import (
     MAX_LISTED_FINDINGS,
+    CsvFinding,
     counts_by_type,
     finding_to_dict,
     render,
@@ -125,3 +128,15 @@ def test_render_transformation_reports_only_the_tally() -> None:
     assert result["counts"] == {"EMAIL": 1, "PHONE": 1}
     assert result["strategy"] == "redact"
     assert "josh@example.com" not in str(result)
+
+
+def test_table_listing_with_wide_coordinates_fits_response_budget() -> None:
+    """Reserve room for table coordinates at the proposed 10 MB file limit."""
+    findings = [
+        CsvFinding("US_ROUTING_NUMBER", TextRange(9_999_990, 9_999_999), 9_999_999, 9_999_999)
+        for _ in range(MAX_LISTED_FINDINGS)
+    ]
+    result = render("findings", findings, "/tmp/" + "a" * 200 + ".csv")
+    assert result["findings_listed"] is True
+    assert len(result["findings"]) == MAX_LISTED_FINDINGS
+    assert len(json.dumps(result)) / 3 < 25_000

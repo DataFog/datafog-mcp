@@ -5,6 +5,7 @@ Rendering scan and transformation results for the datafog tools.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 from datafog_core import TextRange
@@ -13,11 +14,20 @@ from datafog_core import TextRange
 # here is a promise to the agent; add one only alongside its implementation.
 Mode = Literal["findings"]
 
-# Each listed finding costs 12 to 19 tokens of the agent's context, depending
-# on the length of its type name. Claude Code truncates tool output at 25,000
-# tokens, and 1,200 findings of the longest type stay under that. Counts are
-# always complete.
-MAX_LISTED_FINDINGS = 1200
+# Keep even table locations with wide numeric coordinates below the 25,000-token
+# response budget using the benchmark's conservative three-character estimate.
+# Counts stay complete when the listing is omitted.
+MAX_LISTED_FINDINGS = 700
+
+
+@dataclass(frozen=True)
+class CsvFinding:
+    """A content-free location in a table's original source text."""
+
+    entity_type: str
+    source_codepoint_range: TextRange
+    record: int
+    column: int
 
 
 class Labeled(Protocol):
@@ -81,11 +91,15 @@ def finding_to_dict(finding: Located) -> dict[str, Any]:
     Returns:
       A dict with the entity type and the span it occupies.
     """
-    return {
+    result: dict[str, Any] = {
         "type": finding.entity_type,
         "start": finding.source_codepoint_range.start,
         "end": finding.source_codepoint_range.end,
     }
+    # Only location metadata is exposed; headers themselves can contain PII.
+    if isinstance(finding, CsvFinding):
+        result.update(record=finding.record, column=finding.column)
+    return result
 
 
 def render(
@@ -97,8 +111,8 @@ def render(
     Build the tool response for a completed scan.
 
     Locations are listed only when there are at most MAX_LISTED_FINDINGS.
-    Above that, the list is empty and findings_listed is false, so a dense
-    file can't overflow the agent's context, while the counts stay complete.
+    Above that, the list is empty and findings_listed is false, bounding
+    location output while the counts stay complete.
     Leaving the list empty, rather than listing the first few hundred, keeps a
     partial list from being mistaken for a complete one.
 

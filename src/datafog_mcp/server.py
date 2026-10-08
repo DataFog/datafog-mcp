@@ -14,12 +14,14 @@ from pydantic import Field
 
 from datafog_mcp import __version__
 from datafog_mcp.config import SUPPORTED_ENTITIES, ScanConfig, Strategy, transform_config
+from datafog_mcp.csv_processing import CellResult, CsvError, process_csv
 from datafog_mcp.findings import (
     Mode,
     render,
     render_transformation,
 )
-from datafog_mcp.paths import PathNotAllowed
+from datafog_mcp.paths import PathNotAllowed, resolve_output
+from datafog_mcp.policy import OutputPolicyError, load_output_policy
 from datafog_mcp.reader import (
     ReadError,
     WriteError,
@@ -39,7 +41,7 @@ else:
 # Omit for the default set. An empty list asks for nothing, so the schema
 # declares it invalid rather than reading it as the default.
 EntitySelection = Annotated[list[EntityType], Field(min_length=1)] | None
-InputFormat = Literal["auto", "text", "env", "sql"]
+InputFormat = Literal["auto", "text", "csv", "tsv", "env", "sql"]
 
 mcp = FastMCP(
     name="datafog",
@@ -110,21 +112,26 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
         raise ToolError(str(exc)) from exc
 
 
-def _core_scan_config(path: Path, input_format: InputFormat) -> _ScanConfig:
-    """Select Core's email boundaries without changing other detector settings.
+def _core_scan_config(
+    path: Path, input_format: InputFormat, entities: tuple[str, ...]
+) -> _ScanConfig:
+    """Select Core detectors and email boundaries before scanning.
 
     Auto recognizes .env, .env.*, *.env, and *.sql filenames, ignoring case.
     Other files retain plain-text boundaries, including CSV and TSV files.
     An explicit format overrides the filename.
     """
-    if input_format != "auto":
-        return {"format": input_format}
+    selected_entities = list(dict.fromkeys(entities))
+    if input_format in ("text", "env", "sql"):
+        return {"format": input_format, "entities": selected_entities}
+    if input_format in ("csv", "tsv"):
+        return {"format": "text", "entities": selected_entities}
     name = path.name.lower()
     if name == ".env" or name.startswith(".env.") or name.endswith(".env"):
-        return {"format": "env"}
+        return {"format": "env", "entities": selected_entities}
     if name.endswith(".sql"):
-        return {"format": "sql"}
-    return {"format": "text"}
+        return {"format": "sql", "entities": selected_entities}
+    return {"format": "text", "entities": selected_entities}
 
 
 @mcp.tool
@@ -133,6 +140,7 @@ async def datafog_scan(
     mode: Mode = "findings",
     entity_types: EntitySelection = None,
     input_format: InputFormat = "auto",
+    has_header: bool = True,
 ) -> dict[str, Any]:
     """
     Detect personal and sensitive data in a file, without reading it into
@@ -169,8 +177,8 @@ async def datafog_scan(
     and street addresses are not detected.
 
     Routing numbers and NPIs are found only after a label such as "Routing
-    number:" or "NPI:". A bare value, such as one in a CSV column, can be
-    missed or reported as another type.
+    number:" or "NPI:". CSV/TSV headers supply this label context. Bare
+    values in plain text can be missed or reported as another type.
 
     Parameters:
       path: The path of the file to scan.
@@ -179,24 +187,23 @@ async def datafog_scan(
       entity_types: The types to look for. Defaults to API_KEY, BEARER_TOKEN,
       CREDENTIAL_URI, CREDIT_CARD, EMAIL, JWT, NPI, PRIVATE_KEY, SSN, and
       US_ROUTING_NUMBER. DATE, ZIP_CODE, PHONE, and IP_ADDRESS are available
-      on request. An explicit list replaces the defaults; to add a type,
-      include both the default types you want and that type. Omit for the
-      defaults; an empty list is refused.
-      input_format: Email boundary rules. Auto uses env for .env, .env.*,
-      and *.env files, sql for *.sql files (case-insensitive), and text for
-      other files. Choose env or sql for exports with other filenames, or
-      text to keep plain-text matching. ENV assignments and surrounding
-      SQL quotes are preserved by write tools. SQL backslash escapes,
+      on request. An explicit list replaces the defaults; an empty list is refused.
+      input_format: auto parses .csv/.tsv as tables, uses env email boundaries
+      for .env/.env.*/*.env and sql boundaries for *.sql (case-insensitive),
+      and text otherwise. csv, tsv, env, sql, and text override the filename.
+      ENV assignments and SQL quotes are preserved. SQL backslash escapes,
       dollar quoting, and encoded email characters are not interpreted.
+      has_header: For tables, preserve the first record as header context (default).
+      Set false for headerless files or to scan/transform every record as data.
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
       type and offsets of each detected entity. Offsets are listed for up to
-      1,200 entities. Above that, findings is empty and findings_listed is
+      700 entities. Above that, findings is empty and findings_listed is
       false; the count and tally are still complete. To get offsets for a
       dense file, scan again with fewer entity_types.
     """
     with _contained():
-        return await _scan_file(path, mode, entity_types, input_format)
+        return await _scan_file(path, mode, entity_types, input_format, has_header)
 
 
 async def _scan_file(
@@ -204,6 +211,7 @@ async def _scan_file(
     mode: Mode,
     entity_types: list[str] | None,
     input_format: InputFormat,
+    has_header: bool,
 ) -> dict[str, Any]:
     """
     Scan a file and build the response.
@@ -212,7 +220,8 @@ async def _scan_file(
       path: The file to scan.
       mode: What to return.
       entity_types: The types to keep, or None for the default.
-      input_format: Core email boundary rules, or auto for filename inference.
+      input_format: Explicit file format or automatic extension selection.
+      has_header: Whether a table's first record supplies header context.
     Returns:
       The tool response describing what was found.
     """
@@ -224,16 +233,12 @@ async def _scan_file(
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
-    found = await asyncio.to_thread(
-        scan, content.text, _core_scan_config(content.path, input_format)
-    )
-    kept = [item for item in found if config.keeps(item.entity_type)]
-
-    # The engine reports every detector's match, so one value can appear
-    # twice: an NPI is also a valid phone number. Transforming resolves those
-    # overlaps, so the scan reports exactly the spans the write tools replace.
-    # The transformed text is discarded.
-    resolved = await asyncio.to_thread(transform, content.text, kept, transform_config("redact"))
+    try:
+        resolved = await asyncio.to_thread(
+            _process_file, content.text, content.path, config, "redact", input_format, has_header
+        )
+    except CsvError as exc:
+        raise ToolError(str(exc)) from None
 
     return render(
         mode=mode,
@@ -248,16 +253,18 @@ async def _transform_to_file(
     entity_types: list[str] | None,
     strategy: Strategy,
     input_format: InputFormat,
+    has_header: bool,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with detected values transformed.
 
     Parameters:
       path: The file to read.
-      output_path: Where to write, or None for a sibling of the input.
+      output_path: Destination path within the policy's directory, or None for the default name.
       entity_types: The types to transform, or None for the default.
       strategy: One of redact, mask, or remove.
-      input_format: Core email boundary rules, or auto for filename inference.
+      input_format: Explicit file format or automatic extension selection.
+      has_header: Whether a table's first record supplies header context.
     Returns:
       The tool response describing what was replaced.
     """
@@ -268,23 +275,35 @@ async def _transform_to_file(
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
+    try:
+        copy_policy = load_output_policy()
+    except OutputPolicyError as exc:
+        raise ToolError(str(exc)) from None
+
     source = content.path
     suffix = _OUTPUT_SUFFIXES[strategy]
+    # Hidden inputs remain readable, but copies must never create dotfiles.
+    output_stem = source.stem.lstrip(".") or "copy"
     destination = (
         Path(output_path)
         if output_path
-        else source.with_name(f"{source.stem}_{suffix}{source.suffix}")
+        else (copy_policy.directory or source.parent) / f"{output_stem}_{suffix}{source.suffix}"
     )
-
-    found = await asyncio.to_thread(
-        scan, content.text, _core_scan_config(content.path, input_format)
-    )
-    kept = [item for item in found if config.keeps(item.entity_type)]
-
-    result = await asyncio.to_thread(transform, content.text, kept, transform_config(strategy))
 
     try:
-        written = write_text_file(destination, result.text, beside=source)
+        destination = resolve_output(str(destination), source, copy_policy)
+    except PathNotAllowed as exc:
+        raise ToolError(str(exc)) from None
+
+    try:
+        result = await asyncio.to_thread(
+            _process_file, content.text, source, config, strategy, input_format, has_header
+        )
+    except CsvError as exc:
+        raise ToolError(str(exc)) from None
+
+    try:
+        written = write_text_file(destination, result.text, beside=source, copy_policy=copy_policy)
     except (WriteError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
@@ -302,6 +321,7 @@ async def datafog_redact(
     output_path: str | None = None,
     entity_types: EntitySelection = None,
     input_format: InputFormat = "auto",
+    has_header: bool = True,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data replaced by labels.
@@ -319,12 +339,17 @@ async def datafog_redact(
 
     Parameters:
       path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
-      output_path: Where to write. Defaults to a sibling of the input with a
-      _redacted suffix.
+      output_path: Destination path within the owner-configured output directory,
+      or beside the input if none is configured. Defaults to name_redacted.ext.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
-      input_format: Email boundary rules, as for datafog_scan. Defaults to
-      auto; explicit text, env, or sql overrides the filename.
+      input_format: auto parses .csv/.tsv as tables, uses env email boundaries
+      for .env/.env.*/*.env and sql boundaries for *.sql (case-insensitive),
+      and text otherwise. csv, tsv, env, sql, and text override the filename.
+      ENV assignments and SQL quotes are preserved. SQL backslash escapes,
+      dollar quoting, and encoded email characters are not interpreted.
+      has_header: Preserve the first table record as header context (default).
+      Set false for headerless files or to process every record as data.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -335,6 +360,7 @@ async def datafog_redact(
             entity_types,
             strategy="redact",
             input_format=input_format,
+            has_header=has_header,
         )
 
 
@@ -344,13 +370,14 @@ async def datafog_mask(
     output_path: str | None = None,
     entity_types: EntitySelection = None,
     input_format: InputFormat = "auto",
+    has_header: bool = True,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data covered over.
 
-    Each detected value is replaced character for character, so the copy keeps
-    the original length and column alignment but reveals neither the value nor
-    what kind of value it was.
+    Each detected value is replaced character for character, preserving its
+    decoded length but revealing neither the value nor what kind it was.
+    Table serialization may add quotes around changed cells.
 
     Use datafog_redact when the reader should still know what kind of thing was
     removed.
@@ -360,12 +387,17 @@ async def datafog_mask(
 
     Parameters:
       path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
-      output_path: Where to write. Defaults to a sibling of the input with
-      a _masked suffix.
+      output_path: Destination path within the owner-configured output directory,
+      or beside the input if none is configured. Defaults to name_masked.ext.
       entity_types: The types to replace. Defaults to the same types as
       datafog_scan; an empty list is refused.
-      input_format: Email boundary rules, as for datafog_scan. Defaults to
-      auto; explicit text, env, or sql overrides the filename.
+      input_format: auto parses .csv/.tsv as tables, uses env email boundaries
+      for .env/.env.*/*.env and sql boundaries for *.sql (case-insensitive),
+      and text otherwise. csv, tsv, env, sql, and text override the filename.
+      ENV assignments and SQL quotes are preserved. SQL backslash escapes,
+      dollar quoting, and encoded email characters are not interpreted.
+      has_header: Preserve the first table record as header context (default).
+      Set false for headerless files or to process every record as data.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -376,6 +408,7 @@ async def datafog_mask(
             entity_types,
             strategy="mask",
             input_format=input_format,
+            has_header=has_header,
         )
 
 
@@ -385,6 +418,7 @@ async def datafog_remove(
     output_path: str | None = None,
     entity_types: EntitySelection = None,
     input_format: InputFormat = "auto",
+    has_header: bool = True,
 ) -> dict[str, Any]:
     """
     Write a copy of a file with personal data deleted outright.
@@ -402,12 +436,17 @@ async def datafog_remove(
 
     Parameters:
       path: The file to read. UTF-8 text up to 1 MiB, as for datafog_scan.
-      output_path: Where to write. Defaults to a sibling of the input with
-      a _removed suffix.
+      output_path: Destination path within the owner-configured output directory,
+      or beside the input if none is configured. Defaults to name_removed.ext.
       entity_types: The types to delete. Defaults to the same types as
       datafog_scan; an empty list is refused.
-      input_format: Email boundary rules, as for datafog_scan. Defaults to
-      auto; explicit text, env, or sql overrides the filename.
+      input_format: auto parses .csv/.tsv as tables, uses env email boundaries
+      for .env/.env.*/*.env and sql boundaries for *.sql (case-insensitive),
+      and text otherwise. csv, tsv, env, sql, and text override the filename.
+      ENV assignments and SQL quotes are preserved. SQL backslash escapes,
+      dollar quoting, and encoded email characters are not interpreted.
+      has_header: Preserve the first table record as header context (default).
+      Set false for headerless files or to process every record as data.
     Returns:
       A dict with both paths, an entity count, and a tally per type.
     """
@@ -418,7 +457,42 @@ async def datafog_remove(
             entity_types,
             strategy="remove",
             input_format=input_format,
+            has_header=has_header,
         )
+
+
+def _process_file(
+    text: str,
+    source: Path,
+    config: ScanConfig,
+    strategy: Strategy,
+    input_format: InputFormat,
+    has_header: bool,
+) -> CellResult:
+    """Run Core on decoded table cells or on plain text, in a worker thread."""
+    selected: str = input_format
+    if selected == "auto":
+        selected = {".csv": "csv", ".tsv": "tsv"}.get(source.suffix.lower(), "text")
+
+    core_config: _ScanConfig = _core_scan_config(source, input_format, config.entities)
+    if selected in ("csv", "tsv"):
+        core_config["format"] = "text"
+
+    def process(text: str, value_start: int) -> CellResult:
+        found = [
+            item
+            for item in scan(text, core_config)
+            if config.keeps(item.entity_type)
+            and value_start <= item.codepoint_range.start < item.codepoint_range.end <= len(text)
+        ]
+        # Core resolves overlapping detectors identically for scans and writes.
+        return transform(text, found, transform_config(strategy))
+
+    if selected in ("csv", "tsv"):
+        return process_csv(
+            text, process, delimiter="," if selected == "csv" else "\t", has_header=has_header
+        )
+    return process(text, 0)
 
 
 def run_server() -> None:
