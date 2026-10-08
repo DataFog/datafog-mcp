@@ -112,23 +112,26 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
         raise ToolError(str(exc)) from exc
 
 
-def _core_scan_config(path: Path, input_format: InputFormat) -> _ScanConfig:
-    """Select Core's email boundaries without changing other detector settings.
+def _core_scan_config(
+    path: Path, input_format: InputFormat, entities: tuple[str, ...]
+) -> _ScanConfig:
+    """Select Core detectors and email boundaries before scanning.
 
     Auto recognizes .env, .env.*, *.env, and *.sql filenames, ignoring case.
     Other files retain plain-text boundaries, including CSV and TSV files.
     An explicit format overrides the filename.
     """
+    selected_entities = list(dict.fromkeys(entities))
     if input_format in ("text", "env", "sql"):
-        return {"format": input_format}
+        return {"format": input_format, "entities": selected_entities}
     if input_format in ("csv", "tsv"):
-        return {"format": "text"}
+        return {"format": "text", "entities": selected_entities}
     name = path.name.lower()
     if name == ".env" or name.startswith(".env.") or name.endswith(".env"):
-        return {"format": "env"}
+        return {"format": "env", "entities": selected_entities}
     if name.endswith(".sql"):
-        return {"format": "sql"}
-    return {"format": "text"}
+        return {"format": "sql", "entities": selected_entities}
+    return {"format": "text", "entities": selected_entities}
 
 
 @mcp.tool
@@ -468,9 +471,9 @@ def _process_file(
     if selected == "auto":
         selected = {".csv": "csv", ".tsv": "tsv"}.get(source.suffix.lower(), "text")
 
-    core_config: _ScanConfig = _core_scan_config(source, input_format)
+    core_config: _ScanConfig = _core_scan_config(source, input_format, config.entities)
     if selected in ("csv", "tsv"):
-        core_config = {"format": "text"}
+        core_config["format"] = "text"
 
     def process(text: str, value_start: int) -> CellResult:
         found = [

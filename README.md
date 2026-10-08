@@ -190,6 +190,8 @@ For another MCP client, remove the `datafog` entry from that client's MCP config
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the changelog policy and exemption process.
 
+Detector selection is being integrated with Core: MCP passes its default or explicit `entity_types` to Core before scanning, including decoded CSV/TSV cells. This branch requires the upcoming Core release supporting text-scan `entities`; published Core 0.4.2 does not support it. Update the minimum dependency and regenerate the lock after that release before merging.
+
 ```bash
 uv sync --group dev
 uv run pre-commit install
