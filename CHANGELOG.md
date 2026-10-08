@@ -8,7 +8,7 @@ First release: an MCP server that checks a file for personal data and credential
 
 ### Added
 
-- Pass default or explicit entity selections to Core before detection for text, ENV/SQL, and CSV/TSV cell scans. Unselected detectors do not run; findings and copy behavior retain their existing selection rules. Requires the upcoming Core detector-selection release.
+- Pass default or explicit entity selections to Core before detection for text, ENV/SQL, and CSV/TSV cell scans. Unselected detectors do not run; findings and copy behavior retain their existing selection rules. Requires datafog-core 0.4.3 or later.
 
 - `datafog_scan` reports the entity types, per-type counts, and character offsets found in a file. A value two detectors both match is reported once, as the type the write tools would replace it with.
 - `datafog_redact`, `datafog_mask`, and `datafog_remove` write a transformed copy beside the original by default, or in an owner-configured output directory. The original is never modified.
