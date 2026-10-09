@@ -85,7 +85,7 @@ def test_scope_guides_checks_but_does_not_disable_explicit_scans(
     ]:
         source = tmp_path / name
         source.write_text(PRIVATE, encoding="utf-8")
-        result = call("datafog_scan", source, entity_types=["EMAIL"])
+        result = call("datafog_scan", source, entity_types=["EMAIL"], has_header=False)
         assert result["entity_count"] == 1
         assert result["policy"]["scan_before_read"] is expected
         assert call("datafog_policy", source)["scan_before_read"] is expected
@@ -217,22 +217,28 @@ def test_invalid_policy_refuses_scan_without_echoing_values(
     assert PRIVATE not in str(excinfo.value) + captured.out + captured.err + caplog.text
 
 
+@pytest.mark.parametrize("suffix", ["txt", "csv", "tsv"])
 def test_request_uses_one_snapshot_and_next_request_reloads(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    suffix: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    source = tmp_path / "input.txt"
-    source.write_text(f"{APPROVED}\n{PRIVATE}", encoding="utf-8")
+    source = tmp_path / f"input.{suffix}"
+    header = "email\n" if suffix != "txt" else ""
+    source.write_text(header + f"{APPROVED}\n{PRIVATE}", encoding="utf-8")
     location = configure(tmp_path, monkeypatch, f'[allow.exact]\nEMAIL = ["{APPROVED}"]')
     actual_scan = server.scan
 
-    def scan(text: str) -> Any:
+    def scan(text: str, config: Any = None) -> Any:
         location.write_text("broken policy", encoding="utf-8")
-        return actual_scan(text)
+        return actual_scan(text, config)
 
     monkeypatch.setattr(server, "scan", scan)
     result = call("datafog_redact", source, entity_types=["EMAIL"])
     assert result["entity_count"] == 1
-    assert Path(result["output_path"]).read_text(encoding="utf-8") == APPROVED + "\n[EMAIL]"
+    replacement = "[EMAIL]" if suffix == "txt" else '"[EMAIL]"'
+    assert (
+        Path(result["output_path"]).read_text(encoding="utf-8")
+        == header + APPROVED + "\n" + replacement
+    )
     with pytest.raises(ToolError, match="valid UTF-8 TOML"):
         call("datafog_scan", source)
 
@@ -313,3 +319,56 @@ def test_unusable_scope_configuration_never_falls_back(
     configure(tmp_path, monkeypatch, f'[scope]\nfolders = ["{folder.as_posix()}"]')
     with pytest.raises(ToolError):
         call("datafog_policy")
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+@pytest.mark.parametrize("delimiter,suffix", [(",", "csv"), ("\t", "tsv")])
+def test_table_allowlists_use_decoded_values_and_preserve_locations(
+    tool: str, delimiter: str, suffix: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / f"input.{suffix}"
+    text = (
+        f'email{delimiter}NPI\r\n"{APPROVED}"{delimiter}1234567893\r\n'
+        f'"{PRIVATE}"{delimiter}1234567893\r\n'
+    )
+    source.write_bytes(text.encode())
+    configure(
+        tmp_path,
+        monkeypatch,
+        f'[allow.exact]\nEMAIL = ["{APPROVED}"]\nNPI = ["1234567893"]',
+    )
+    result = call(tool, source, entity_types=["EMAIL", "NPI"])
+    assert result["counts"] == {"EMAIL": 1}
+    if tool == "datafog_scan":
+        finding = result["findings"][0]
+        assert finding["record"] == 2
+        assert finding["column"] == 1
+        assert text[finding["start"] : finding["end"]] == PRIVATE
+        assert result["policy"]["action"] == "ask"
+    else:
+        output = Path(result["output_path"]).read_bytes().decode()
+        assert output.startswith(f'email{delimiter}NPI\r\n"{APPROVED}"{delimiter}1234567893\r\n')
+        assert PRIVATE not in output
+        assert output.count("1234567893") == 2
+        assert output.count("\r\n") == 3
+    assert source.read_bytes().decode() == text
+
+
+@pytest.mark.parametrize("suffix", ["txt", "csv", "tsv"])
+def test_allowlists_apply_before_response_cutoff(
+    suffix: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / f"input.{suffix}"
+    header = "email\n" if suffix != "txt" else ""
+    source.write_text(header + (APPROVED + "\n") * 701 + PRIVATE + "\n", encoding="utf-8")
+    configure(tmp_path, monkeypatch, f'[allow.exact]\nEMAIL = ["{APPROVED}"]')
+    result = call("datafog_scan", source, entity_types=["EMAIL"])
+    assert result["entity_count"] == 1
+    assert result["findings_listed"] is True
+    assert len(result["findings"]) == 1
+    configure(tmp_path, monkeypatch, '[workflow]\non_findings = "stop"')
+    result = call("datafog_scan", source, entity_types=["EMAIL"])
+    assert result["entity_count"] == 702
+    assert result["findings_listed"] is False
+    assert result["findings"] == []
+    assert result["policy"]["action"] == "stop"
