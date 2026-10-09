@@ -14,6 +14,11 @@ from datafog_core import TextRange
 # here is a promise to the agent; add one only alongside its implementation.
 Mode = Literal["findings"]
 
+# Keep even table locations with wide numeric coordinates below the 25,000-token
+# response budget using the benchmark's conservative three-character estimate.
+# Counts stay complete when the listing is omitted.
+MAX_LISTED_FINDINGS = 700
+
 
 @dataclass(frozen=True)
 class CsvFinding:
@@ -105,6 +110,12 @@ def render(
     """
     Build the tool response for a completed scan.
 
+    Locations are listed only when there are at most MAX_LISTED_FINDINGS.
+    Above that, the list is empty and findings_listed is false, bounding
+    location output while the counts stay complete.
+    Leaving the list empty, rather than listing the first few hundred, keeps a
+    partial list from being mistaken for a complete one.
+
     Parameters:
       mode: The requested return mode.
       findings: Detections, with overlapping matches already resolved.
@@ -112,12 +123,15 @@ def render(
     Returns:
       A dict representing what was found, shaped by the mode.
     """
+    listed = len(findings) <= MAX_LISTED_FINDINGS
     return {
         "path": path,
         "mode": mode,
         "entity_count": len(findings),
         "counts": counts_by_type(findings),
-        "findings": [finding_to_dict(item) for item in findings],
+        "findings": [finding_to_dict(item) for item in findings] if listed else [],
+        "findings_listed": listed,
+        "findings_limit": MAX_LISTED_FINDINGS,
     }
 
 

@@ -127,3 +127,34 @@ uv run python scripts/benchmark_sizes.py summarize results.jsonl
 ```
 
 Only control, dense, and max run at 100 MB unless `--full` is given. To measure another branch, copy the script into that checkout; it drives the tools through an MCP client, so it doesn't depend on server internals beyond the file reader it wraps.
+
+## Response-listing validation after CSV and type selection
+
+PR #60 caps location listings at **700 findings** for every input format. At
+701 or more, scans return complete counts and an empty list with
+`findings_listed: false`. Redact, mask, and remove still transform every finding.
+The earlier 1,200 proposal was sized for plain-text findings; CSV/TSV also
+include record and column coordinates.
+
+Local macOS ARM64, Python 3.12, published Core 0.4.3: in-memory MCP scans with
+700 labeled US routing numbers after 950,000 padding characters returned:
+
+| Format | MCP text characters | Estimated tokens (characters / 3) |
+|---|---:|---:|
+| Text | about 40,120 | about 13,373 |
+| CSV | about 56,813 | about 18,937 |
+| TSV | about 56,813 | about 18,937 |
+
+Temporary path length can vary these sizes slightly. A separate regression
+uses seven-digit offsets, records, and columns, a long path, and the longest
+currently supported type name. Its conservative JSON serialization stays below
+75,000 characters at 700 findings. The equivalent 1,200-finding response exceeds
+120,000 characters.
+
+Tests check actual MCP text output as well as structured results, the listing
+boundary for both table delimiters, omission of matched values, and complete
+transformations above the cutoff. These are response-size checks, not a rerun
+of the timing/memory matrix above. Token figures use the existing benchmark
+estimate, not an exact tokenizer or a guarantee for every client's context
+budget. Rerun the size/format/density matrix on the combined code before the
+10 MB limit change (#61).

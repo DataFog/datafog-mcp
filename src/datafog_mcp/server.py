@@ -197,7 +197,10 @@ async def datafog_scan(
       Set false for headerless files or to scan/transform every record as data.
     Returns:
       A dict with the scanned path, an entity count, a tally per type, and the
-      detected entities.
+      type and offsets of each detected entity. Offsets are listed for up to
+      700 entities. Above that, findings is empty and findings_listed is
+      false; the count and tally are still complete. To get offsets for a
+      dense file, scan again with fewer entity_types.
     """
     with _contained():
         return await _scan_file(path, mode, entity_types, input_format, has_header)
