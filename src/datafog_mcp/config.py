@@ -52,7 +52,9 @@ DEFAULT_ENTITIES: tuple[str, ...] = (
 
 Strategy = Literal["mask", "redact", "remove"]
 
-DEFAULT_MAX_BYTES = 1_048_576
+# Decimal megabytes. Benchmarks in docs/validation/file-size-benchmarks.md
+# (PR #59) show every format and entity density within budget at 10 MB.
+DEFAULT_MAX_BYTES = 10_000_000
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 # File size benchmarks
 
-Measurements to decide the file size limit, currently 1 MiB. Produced by [`scripts/benchmark_sizes.py`](../../scripts/benchmark_sizes.py).
+Measurements behind the 10 MB file size limit, which replaced the earlier 1 MiB limit. Produced by [`scripts/benchmark_sizes.py`](../../scripts/benchmark_sizes.py).
 
 ## Budgets
 
@@ -35,7 +35,7 @@ These are proposals and haven't been agreed yet.
   JSON and SQL saturate near 25,000 to 28,000, so their dense and max rows are nearly the same file.
 - **Each call runs in a fresh process.** Peak memory therefore belongs to that call. It includes about 95 MB for importing the server.
 - **Calls go through an MCP client**, so the measured response is what reaches the agent. Tokens are estimated at three characters each, which slightly overestimates.
-- **The 1 MiB limit is lifted** inside the measuring process only.
+- **The file size limit is lifted** inside the measuring process only.
 - **Every run checks that the scan found exactly the planted entities.** All runs below did.
 
 Machine: Linux x86_64, 16 CPUs, Python 3.12.11, datafog-core 0.4.2. One run per cell. Times are far enough from the budget that repeats wouldn't change a conclusion, and memory doesn't vary between runs.

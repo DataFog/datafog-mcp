@@ -83,7 +83,7 @@ Credential detection is not a substitute for a dedicated secret scanner. A clean
 
 ## Supported files
 
-UTF-8 text, up to 1 MiB (1,048,576 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. CSV/TSV files are scanned as decoded cells; ENV/SQL files use their email boundary rules, and other files use plain-text matching.
+UTF-8 text, up to 10 MB (10,000,000 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. CSV/TSV files are scanned as decoded cells; ENV/SQL files use their email boundary rules, and other files use plain-text matching.
 
 ### CSV and TSV
 
@@ -105,7 +105,7 @@ Refused with an error, never scanned:
 
 - **Other encodings.** UTF-16, UTF-32, Latin-1, and so on. Convert to UTF-8 first. A UTF-8 byte-order mark, as Excel writes, is fine and is kept in the copy.
 - **Binary files.** XLSX, PDF, DOCX, images, and archives such as ZIP are not parsed. Export to CSV or text first.
-- **Anything over 1 MiB.**
+- **Anything over 10 MB.**
 
 A refusal is not a clean result. It means the file was not checked.
 
