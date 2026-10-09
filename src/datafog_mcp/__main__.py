@@ -106,9 +106,12 @@ def main() -> None:
             print(f"Copy destination: {current.directory or 'beside the input'}")
             print("Files to scan before reading (within allowed roots):")
             for folder in current.scope_folders:
-                print(f"  {folder}")
+                status = " (missing; inactive)" if folder in current.missing_scope_folders else ""
+                print(f"  {folder}{status}")
             if not current.scope_folders:
                 print("  all allowed directories")
+            for warning in current.warnings:
+                print(f"Warning: {warning}")
             print("Extensions: " + (", ".join(current.scope_extensions) or "all"))
             print(f"On findings: {current.on_findings} (advisory)")
             print(f"Suggested transformation: {current.transform_strategy}")
