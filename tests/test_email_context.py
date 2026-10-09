@@ -80,6 +80,11 @@ def test_email_boundaries_preserve_surrounding_syntax(
         if tool == "datafog_mask"
         else ""
     )
+    if filename == "address.csv" and input_format == "auto":
+        # Table processing preserves the email span and quotes the changed cell,
+        # including an empty cell when removal clears the sole column.
+        assert (finding["record"], finding["column"]) == (1, 1)
+        replacement = '"' + replacement + '"'
     expected = source[:start] + replacement + source[start + len(address) :]
     output = Path(result["output_path"])
     assert output != path
