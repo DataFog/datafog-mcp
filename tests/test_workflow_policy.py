@@ -306,7 +306,7 @@ def test_loaded_snapshot_cannot_be_mutated(tmp_path: Path, monkeypatch: pytest.M
         current.allow_exact["EMAIL"] = frozenset()  # type: ignore[index]
 
 
-@pytest.mark.parametrize("kind", ["missing", "file", "malformed-roots"])
+@pytest.mark.parametrize("kind", ["file", "malformed-roots"])
 def test_unusable_scope_configuration_never_falls_back(
     kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -372,3 +372,116 @@ def test_allowlists_apply_before_response_cutoff(
     assert result["findings_listed"] is False
     assert result["findings"] == []
     assert result["policy"]["action"] == "stop"
+
+
+@pytest.mark.parametrize("tool", [*TOOLS, "datafog_policy"])
+def test_deleted_scope_folder_warns_without_blocking_explicit_operations(
+    tool: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = tmp_path / "exports"
+    folder.mkdir()
+    configure(tmp_path, monkeypatch, f'[scope]\nfolders = ["{folder.as_posix()}"]')
+    assert call("datafog_policy", folder / "future.txt")["scan_before_read"] is True
+    folder.rmdir()
+    source = tmp_path / "other.txt"
+    source.write_text(PRIVATE, encoding="utf-8")
+    result = (
+        call(tool, source, entity_types=["EMAIL"])
+        if tool != "datafog_policy"
+        else call(tool, source)
+    )
+    assert result["warnings"]
+    assert str(folder) not in json.dumps(result["warnings"])
+    if tool == "datafog_policy":
+        assert result["scope"]["folders"] == [str(folder)]
+        assert result["scope"]["available_folders"] == []
+        assert result["scope"]["missing_folders"] == [str(folder)]
+        assert result["scan_before_read"] is False
+    elif tool == "datafog_scan":
+        assert result["entity_count"] == 1
+        assert result["policy"]["scan_before_read"] is False
+    else:
+        assert result["entity_count"] == 1
+        assert PRIVATE not in Path(result["output_path"]).read_text(encoding="utf-8")
+    assert source.read_text(encoding="utf-8") == PRIVATE
+    # Even discovery of a future path must not treat a missing restriction as
+    # the deliberately empty list that means all allowed directories.
+    assert call("datafog_policy", folder / "future.txt")["scan_before_read"] is False
+    folder.mkdir()
+    restored = call("datafog_policy", folder / "future.txt")
+    assert restored["scan_before_read"] is True
+    assert restored["scope"]["missing_folders"] == []
+    assert "warnings" not in restored
+
+
+def test_missing_folder_keeps_other_scope_folders_and_extension_restrictions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    missing = tmp_path / "missing"
+    available = tmp_path / "available"
+    available.mkdir()
+    configure(
+        tmp_path,
+        monkeypatch,
+        f'[scope]\nfolders = ["{missing}", "{available}"]\nextensions = [".txt"]',
+    )
+    for source, expected in [
+        (available / "input.txt", True),
+        (available / "input.csv", False),
+        (tmp_path / "elsewhere.txt", False),
+    ]:
+        result = call("datafog_policy", source)
+        assert result["scan_before_read"] is expected
+        assert result["scope"]["available_folders"] == [str(available)]
+        assert result["scope"]["missing_folders"] == [str(missing)]
+
+
+@pytest.mark.parametrize("kind", ["outside", "credential", "symlink"])
+def test_missing_scope_still_enforces_access_boundaries(
+    kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    monkeypatch.setenv(ALLOWED_ROOTS_VAR, str(allowed))
+    folder = tmp_path / "outside" / "missing"
+    if kind == "credential":
+        folder = allowed / ".ssh" / "missing"
+    elif kind == "symlink":
+        link = allowed / "link"
+        link.symlink_to(tmp_path / "outside", target_is_directory=True)
+        folder = link / "missing"
+    configure(tmp_path, monkeypatch, f'[scope]\nfolders = ["{folder}"]')
+    with pytest.raises(ToolError, match="outside allowed roots|credential directory"):
+        call("datafog_policy")
+
+
+def test_scope_permission_error_is_not_reported_as_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = tmp_path / "private"
+    folder.mkdir()
+    configure(tmp_path, monkeypatch, f'[scope]\nfolders = ["{folder}"]')
+    actual_resolve = Path.resolve
+
+    def resolve(path: Path, strict: bool = False) -> Path:
+        if path == folder:
+            raise PermissionError("sensitive details")
+        return actual_resolve(path, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", resolve)
+    with pytest.raises(ToolError, match="cannot be resolved"):
+        call("datafog_policy")
+
+
+def test_owner_cli_reports_missing_scope_without_claiming_unrestricted_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from datafog_mcp import __main__ as cli
+
+    configure(tmp_path, monkeypatch, f'[scope]\nfolders = ["{tmp_path / "missing"}"]')
+    monkeypatch.setattr("sys.argv", ["datafog-mcp", "policy"])
+    cli.main()
+    output = capsys.readouterr().out
+    assert "missing; inactive" in output
+    assert "Warning:" in output
+    assert "all allowed directories" not in output

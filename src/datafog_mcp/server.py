@@ -153,6 +153,8 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
             "allowed_roots": [str(root) for root in roots],
             "scope": {
                 "folders": [str(folder) for folder in current.scope_folders],
+                "available_folders": [str(folder) for folder in current.available_scope_folders],
+                "missing_folders": [str(folder) for folder in current.missing_scope_folders],
                 "extensions": list(current.scope_extensions),
             },
             "output_directory": str(current.directory) if current.directory else None,
@@ -162,6 +164,8 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
                 "transform_strategy": current.transform_strategy,
             },
         }
+        if current.warnings:
+            result["warnings"] = current.warnings
         if resolved is not None:
             result["scan_before_read"] = current.in_scope(resolved)
         return result
@@ -321,6 +325,8 @@ async def _scan_file(
     }
     if resolved.transformations and current.on_findings == "transform":
         response["policy"]["transform_strategy"] = current.transform_strategy
+    if current.warnings:
+        response["warnings"] = current.warnings
     return response
 
 
@@ -387,12 +393,15 @@ async def _transform_to_file(
     except (WriteError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
-    return render_transformation(
+    response = render_transformation(
         transformations=result.transformations,
         input_path=str(source),
         output_path=str(written),
         strategy=strategy,
     )
+    if copy_policy.warnings:
+        response["warnings"] = copy_policy.warnings
+    return response
 
 
 @mcp.tool
