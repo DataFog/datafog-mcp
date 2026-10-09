@@ -10,10 +10,12 @@ Detection runs locally on the [datafog-core](https://github.com/DataFog/datafog-
 
 The guarantee holds when a tool fails, too. An unexpected error returns only its type, such as `datafog failed with RuntimeError`, and its details are kept out of both the response and the server's log.
 
+These checks are advisory and reduce exposure; they do not de-identify data or enforce an agent's file access. They complement enterprise data-loss-prevention (DLP) and endpoint controls rather than replace them. Plain-text names and street addresses are not detected by this installation.
+
 What responses do carry:
 
 - **Paths.** Every response names the files it read and wrote, and errors name the path they refused. A filename like `jane_doe_lab_results.csv` identifies a person on its own.
-- **Metadata.** Entity types, per-type counts, and character offsets. These reveal that a file holds, say, two email addresses at known positions, without revealing the addresses.
+- **Metadata.** Entity types, per-type counts, and character offsets, plus numeric record/column locations for tables. These reveal that a file holds, say, two email addresses at known positions, without revealing addresses, cell values, or header text.
 - **Allowed roots.** A refused path returns the configured roots, which name directories on your machine.
 
 ## Requirements
@@ -38,6 +40,8 @@ claude mcp add --scope user datafog -- ~/.local/bin/datafog-mcp
 
 Bare `datafog-mcp` runs the server over stdio; `datafog-mcp serve` is the same thing spelled out.
 
+The client must be able to launch this executable and access files on this machine. A cloud-hosted agent cannot reach this local stdio server directly. The Claude Code instructions above do not establish support for other clients; those need separate integration testing.
+
 ## Tools
 
 File tools take a path and return scan metadata or a copy path. `datafog_policy` discovers owner settings and can check a path's routine scanning scope. None returns file contents or matched values.
@@ -45,12 +49,14 @@ File tools take a path and return scan metadata or a copy path. `datafog_policy`
 | Tool | What it does | Output |
 |---|---|---|
 | `datafog_policy` | Reports owner settings and an optional path's routine scanning scope | Metadata only |
-| `datafog_scan` | Reports entity types, counts, and character offsets | — |
+| `datafog_scan` | Reports entity types, counts, and character offsets (offsets for up to 700 findings) | — |
 | `datafog_redact` | Replaces each value with a label naming its kind, `[EMAIL]` | `name_redacted.ext` |
-| `datafog_mask` | Covers each value character for character, preserving length | `name_masked.ext` |
+| `datafog_mask` | Covers each value character for character, preserving decoded value length | `name_masked.ext` |
 | `datafog_remove` | Deletes each value outright, leaving no marker | `name_removed.ext` |
 
-The write tools never modify the original. By default they create a sibling of the input. You can choose a fixed output directory in `policy.toml` during setup (see below). An existing file at the destination is never overwritten. `output_path` can choose a filename within that directory, but cannot select another allowed root or a subdirectory.
+A scan lists the offsets of at most 700 findings, to bound response size, including CSV/TSV record and column locations. Above that, `findings` is empty and `findings_listed` is `false`, while `entity_count` and `counts` remain complete. To see where values are in a dense file, scan again with fewer `entity_types`.
+
+The write tools never modify the original. By default they create a sibling of the input. You can choose a fixed output directory in `policy.toml` during setup (see below). An existing file at the destination is never overwritten. `output_path` can choose a filename within that directory, but cannot select another allowed root or a subdirectory. Output filenames beginning with `.` are refused, including missing shell startup files such as `.profile`. Hidden inputs remain scannable; default copies strip leading dots from the input stem (for example, `.env` becomes `env_redacted`).
 
 A copy gets the input's permissions, minus any execute bits, so a file only you can read produces a copy only you can read. A copy can still hold values the detectors missed, so it is never made more readable than its source. If a write fails partway, the incomplete copy is deleted.
 
@@ -58,23 +64,49 @@ Before creating a copy, the server checks the destination filesystem has space f
 
 Detected by default:
 
-- **Personal data** — `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `DATE`, `ZIP_CODE`
+- **Personal data** — `EMAIL`, `SSN`, `CREDIT_CARD`
 - **Financial and health identifiers** — `US_ROUTING_NUMBER`, `NPI`
 - **Credentials** — `API_KEY`, `BEARER_TOKEN`, `JWT`, `CREDENTIAL_URI`, `PRIVATE_KEY`
 
-`IP_ADDRESS` is available but off by default. Pass `entity_types` to narrow or widen the set, or omit it for the defaults. Any other type is refused, and so is an empty list, which would select nothing.
+`DATE`, `ZIP_CODE`, `PHONE`, and `IP_ADDRESS` are available but off by default. Dates, ZIP codes, and phone numbers can match operational timestamps or numeric IDs, so enable them when that coverage is needed. A default scan does not check these types, and a default write leaves their values unchanged unless another selected detector also matches them.
 
-Credential detection covers common formats. It is not a substitute for a dedicated secret scanner, and a clean result is not proof a file holds no secrets.
+Pass `entity_types` to choose the types to check or transform, or omit it for the defaults. An explicit list **replaces** the defaults; it does not add to them. For example, `{"path": "/absolute/path/export.csv", "entity_types": ["EMAIL", "PHONE", "DATE", "ZIP_CODE"]}` checks only those four types. Include every default type you still want when opting into another type. Unsupported types and an empty list are refused.
+
+Some types are narrower than their names suggest:
+
+- **`US_ROUTING_NUMBER` and `NPI`** are found only after a label, such as `Routing number:` or `NPI:`. Table headers supply this label context; bare values in plain text can be missed or reported as another type.
+- **`API_KEY`** covers GitHub tokens and Stripe secret and restricted keys. Keys from other providers, such as AWS, are not detected.
+- **`BEARER_TOKEN`** is the token in an `Authorization: Bearer` header.
+- **`CREDENTIAL_URI`** covers PostgreSQL connection strings that include a password (`postgres://` or `postgresql://`). Other schemes, such as MySQL, Redis, or MongoDB, are not detected.
+- **`PRIVATE_KEY`** is a complete PEM private-key block. Public keys and certificates are not reported.
+
+Credential detection is not a substitute for a dedicated secret scanner. A clean result means none of the selected detectors matched; it is not proof a file holds no sensitive data or secrets.
 
 ## Supported files
 
-UTF-8 text, up to 1 MiB (1,048,576 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. Detection reads the file as flat text, so it finds values anywhere in it but has no notion of columns or fields.
+UTF-8 text, up to 10 MB (10,000,000 bytes): CSV, TSV, JSON, logs, SQL dumps, plain text, and similar. CSV/TSV files are scanned as decoded cells; ENV/SQL files use their email boundary rules, and other files use plain-text matching.
+
+### CSV and TSV
+
+All four tools accept `input_format`: `auto` (default) selects comma-separated CSV for `.csv` and tab-separated TSV for `.tsv`, ignoring extension case; ENV/SQL filenames select their email boundary rules as described below; other extensions use plain text. Choose `csv`, `tsv`, `env`, or `sql` explicitly for another filename, or `text` to force flat scanning.
+
+The first record is a header by default (`has_header=true`). It supplies context for label-sensitive detectors such as NPI and routing numbers, and is preserved without scanning or transforming its contents. Set `has_header=false` for headerless files, or when the first record may itself contain sensitive values that need processing. Header presence is never guessed.
+
+Scan findings add numeric `record` and `column` fields, both one-based; record 1 is the first data record after the header. A quoted multiline cell is part of one record. `start`/`end` remain character offsets into the original raw file, including its BOM, line endings, and doubled quote escapes. Header strings are never returned, because they can contain sensitive data too.
+
+Writes preserve the delimiter, record/column structure, headers, BOM, line endings, and untouched cell syntax. Changed cells are quoted and embedded double quotes escaped; removing the sole value in a one-column record writes `""` rather than a blank line. Masking preserves decoded value length, but added CSV quotes can change the serialized file length.
+
+This supports comma/tab delimiters and double-quote escaping, including quoted multiline values and duplicate or empty headers. Trailing blank lines, ragged rows, and literal quotes inside unquoted fields are accepted and preserved. Missing cells are not filled in; extra cells are scanned without header context. Quoted tabs and multiline cells remain supported in TSV. Unterminated quoted fields, trailing text after a closing quote, and interior blank records are refused with a content-free error naming the record and column (error records include the header). The error suggests an explicit plain-text scan, whose transformed copies do not guarantee table structure. Empty and header-only files are valid. Other delimiters and backslash escaping require conversion or an explicit plain-text scan; plain-text transformation does not guarantee table structure.
+
+Email matching uses format-specific boundaries in ENV and SQL files. With the default `input_format="auto"`, `.env`, `.env.*`, and `*.env` filenames select ENV boundaries; `*.sql` selects SQL boundaries, ignoring filename case. CSV and TSV use plain-text email boundaries within each decoded cell. Other files use plain-text boundaries. All four tools accept an explicit `input_format` of `env`, `sql`, or `text` to override the filename.
+
+For example, an ENV copy preserves `EMAIL=` and surrounding quotes while transforming the address; a SQL copy preserves the quotes surrounding a string value. Scan offsets refer to the email's span in the original file, including doubled SQL quotes within the address, using Unicode character positions. This is not a full ENV or SQL parser: SQL backslash escapes, dollar quoting, and encoded email characters are not interpreted.
 
 Refused with an error, never scanned:
 
 - **Other encodings.** UTF-16, UTF-32, Latin-1, and so on. Convert to UTF-8 first. A UTF-8 byte-order mark, as Excel writes, is fine and is kept in the copy.
 - **Binary files.** XLSX, PDF, DOCX, images, and archives such as ZIP are not parsed. Export to CSV or text first.
-- **Anything over 1 MiB.**
+- **Anything over 10 MB.**
 
 A refusal is not a clean result. It means the file was not checked.
 
@@ -145,7 +177,7 @@ transform_strategy = "redact"
 
 Scanning folders must already exist and resolve inside allowed roots. Validation expands `~`, follows symlinks, and refuses credential directories. Narrowing roots, moving a folder, or retargeting a symlink takes effect on the next request; an invalid scope causes a configuration error rather than being ignored. An omitted/empty folder list means all allowed directories, and an omitted/empty extension list means all extensions. When both are provided, both must match. Extensions are dot-prefixed and matched without regard to case. These settings describe routine checks; existing advice about avoiding unnecessary scans of project source/configuration still applies.
 
-Exact allowlists suppress a complete detected value only for its configured entity type, with no case folding, whitespace normalization, substring matching, or regex rules. They apply before overlap resolution in scans and all write tools. A value that also matches another detector can still be reported or transformed under that other type. Approved values remain in copies, so configure only values you intentionally permit to remain. Allowlist values are never included in tool responses or error messages.
+Exact allowlists suppress a complete detected value only for its configured entity type, with no case folding, whitespace normalization, substring matching, or regex rules. They apply before overlap resolution in scans and all write tools, including decoded CSV/TSV cell values. Header labels supply detector context and are not part of the value matched against an allowlist. A value that also matches another detector can still be reported or transformed under that other type. Approved values remain in copies, so configure only values you intentionally permit to remain. Allowlist values are never included in tool responses or error messages.
 
 The agent can call `datafog_policy` to discover scope, workflow settings, copy destination, and allowlist counts. With an optional `path`, it checks roots and reports `scan_before_read`; it does not read or scan the file. A scope match is a scheduling instruction, never evidence that a file is clean.
 
@@ -191,6 +223,8 @@ For another MCP client, remove the `datafog` entry from that client's MCP config
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the changelog policy and exemption process.
+
+MCP passes its default or explicit `entity_types` to Core before scanning, including decoded CSV/TSV cells. Only selected detectors run. This requires datafog-core 0.4.3 or later.
 
 ```bash
 uv sync --group dev
