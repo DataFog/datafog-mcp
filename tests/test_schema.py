@@ -17,7 +17,7 @@ from fastmcp import Client
 from datafog_mcp.config import SUPPORTED_ENTITIES
 from datafog_mcp.server import mcp
 
-TOOLS = ["datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove"]
+TOOLS = ["datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove", "datafog_pseudonymize"]
 
 
 def _schemas() -> dict[str, dict[str, Any]]:
@@ -71,3 +71,18 @@ def test_empty_selection_is_refused_by_the_schema(tool: str) -> None:
     array = next(option for option in selection["anyOf"] if option.get("type") == "array")
 
     assert array["minItems"] == 1
+
+
+def test_pseudonym_schema_requires_scope_and_has_no_key_management_tools() -> None:
+    schemas = _schemas()
+    schema = schemas["datafog_pseudonymize"]
+    assert set(schema["required"]) == {"path", "scope"}
+    assert set(schema["properties"]) == {
+        "path",
+        "scope",
+        "output_path",
+        "entity_types",
+        "input_format",
+        "has_header",
+    }
+    assert set(schemas) == set(TOOLS) | {"datafog_policy"}

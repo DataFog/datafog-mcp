@@ -53,6 +53,7 @@ File tools take a path and return scan metadata or a copy path. `datafog_policy`
 | `datafog_redact` | Replaces each value with a label naming its kind, `[EMAIL]` | `name_redacted.ext` |
 | `datafog_mask` | Covers each value character for character, preserving decoded value length | `name_masked.ext` |
 | `datafog_remove` | Deletes each value outright, leaving no marker | `name_removed.ext` |
+| `datafog_pseudonymize` | Replaces values consistently using an explicitly configured scope key | `name_pseudonymized.ext` |
 
 A scan lists the offsets of at most 700 findings, to bound response size, including CSV/TSV record and column locations. Above that, `findings` is empty and `findings_listed` is `false`, while `entity_count` and `counts` remain complete. To see where values are in a dense file, scan again with fewer `entity_types`.
 
@@ -88,7 +89,7 @@ UTF-8 text, up to 10 MB (10,000,000 bytes): CSV, TSV, JSON, logs, SQL dumps, pla
 
 ### CSV and TSV
 
-All four tools accept `input_format`: `auto` (default) selects comma-separated CSV for `.csv` and tab-separated TSV for `.tsv`, ignoring extension case; ENV/SQL filenames select their email boundary rules as described below; other extensions use plain text. Choose `csv`, `tsv`, `env`, or `sql` explicitly for another filename, or `text` to force flat scanning.
+All five file tools accept `input_format`: `auto` (default) selects comma-separated CSV for `.csv` and tab-separated TSV for `.tsv`, ignoring extension case; ENV/SQL filenames select their email boundary rules as described below; other extensions use plain text. Choose `csv`, `tsv`, `env`, or `sql` explicitly for another filename, or `text` to force flat scanning.
 
 The first record is a header by default (`has_header=true`). It supplies context for label-sensitive detectors such as NPI and routing numbers, and is preserved without scanning or transforming its contents. Set `has_header=false` for headerless files, or when the first record may itself contain sensitive values that need processing. Header presence is never guessed.
 
@@ -98,7 +99,7 @@ Writes preserve the delimiter, record/column structure, headers, BOM, line endin
 
 This supports comma/tab delimiters and double-quote escaping, including quoted multiline values and duplicate or empty headers. Trailing blank lines, ragged rows, and literal quotes inside unquoted fields are accepted and preserved. Missing cells are not filled in; extra cells are scanned without header context. Quoted tabs and multiline cells remain supported in TSV. Unterminated quoted fields, trailing text after a closing quote, and interior blank records are refused with a content-free error naming the record and column (error records include the header). The error suggests an explicit plain-text scan, whose transformed copies do not guarantee table structure. Empty and header-only files are valid. Other delimiters and backslash escaping require conversion or an explicit plain-text scan; plain-text transformation does not guarantee table structure.
 
-Email matching uses format-specific boundaries in ENV and SQL files. With the default `input_format="auto"`, `.env`, `.env.*`, and `*.env` filenames select ENV boundaries; `*.sql` selects SQL boundaries, ignoring filename case. CSV and TSV use plain-text email boundaries within each decoded cell. Other files use plain-text boundaries. All four tools accept an explicit `input_format` of `env`, `sql`, or `text` to override the filename.
+Email matching uses format-specific boundaries in ENV and SQL files. With the default `input_format="auto"`, `.env`, `.env.*`, and `*.env` filenames select ENV boundaries; `*.sql` selects SQL boundaries, ignoring filename case. CSV and TSV use plain-text email boundaries within each decoded cell. Other files use plain-text boundaries. All five file tools accept an explicit `input_format` of `env`, `sql`, or `text` to override the filename.
 
 For example, an ENV copy preserves `EMAIL=` and surrounding quotes while transforming the address; a SQL copy preserves the quotes surrounding a string value. Scan offsets refer to the email's span in the original file, including doubled SQL quotes within the address, using Unicode character positions. This is not a full ENV or SQL parser: SQL backslash escapes, dollar quoting, and encoded email characters are not interpreted.
 
@@ -150,7 +151,7 @@ version = 1
 directory = "~/Documents/datafog-copies"
 ```
 
-The directory must already exist and be an absolute path or start with `~`. The server creates files directly inside it, retaining the usual `_redacted`, `_masked`, or `_removed` names. It never creates directories automatically. Setting this destination grants no additional access: allowed roots, credential-directory denials, and the configuration-directory write refusal still apply. If two inputs produce the same output name, use an explicit destination path inside the configured directory; existing copies are never overwritten.
+The directory must already exist and be an absolute path or start with `~`. The server creates files directly inside it, retaining the usual `_redacted`, `_masked`, `_removed`, or `_pseudonymized` names. It never creates directories automatically. Setting this destination grants no additional access: allowed roots, credential-directory denials, and the configuration-directory write refusal still apply. If two inputs produce the same output name, use an explicit destination path inside the configured directory; existing copies are never overwritten.
 
 Edits take effect on the next request. A missing policy file uses sibling copies. A valid file containing just `version = 1` also explicitly selects sibling copies. An empty, malformed, unreadable, or unsupported policy refuses scans and writes rather than falling back.
 
@@ -181,9 +182,59 @@ Exact allowlists suppress a complete detected value only for its configured enti
 
 The agent can call `datafog_policy` to discover scope, workflow settings, copy destination, and allowlist counts. With an optional `path`, it checks roots and reports `scan_before_read`; it does not read or scan the file. Its scope metadata distinguishes configured, available, and missing folders. Missing-folder warnings also appear in file-tool responses and the owner CLI. A scope match is a scheduling instruction, never evidence that a file is clean.
 
-Completed scans return advisory `policy.action`: `ask` (default), `transform`, or `stop` when non-allowlisted findings remain; `proceed` when none remain under the selected detectors and allowlists. `transform` includes the suggested strategy (`redact`, `mask`, or `remove`). Scans never automatically write a copy. Explicit write tools retain the strategy requested by the caller. These actions guide the agent; the server cannot prevent access through another tool. Failed scans or invalid policies never authorize a fallback read of the original.
+Completed scans return advisory `policy.action`: `ask` (default), `transform`, or `stop` when non-allowlisted findings remain; `proceed` when none remain under the selected detectors and allowlists. `transform` includes the suggested strategy (`redact`, `mask`, `remove`, or `pseudonymize`). With `pseudonymize`, it also includes the configured `pseudonym_scope`. Scans never automatically write a copy. Explicit write tools retain the strategy requested by the caller. These actions guide the agent; the server cannot prevent access through another tool. Failed scans or invalid policies never authorize a fallback read of the original.
 
 `datafog-mcp policy` shows the same settings to the owner, including counts instead of exact allowlist values. The parser rejects unknown sections/settings so configuration mistakes cannot silently disable a safeguard. Each request uses one immutable policy snapshot; edits apply to subsequent requests.
+
+### Consistent pseudonyms and local key setup
+
+Use `datafog_pseudonymize(path, scope)` when analysis needs to link repeated values across files. Core creates deterministic keyed pseudonyms: the same exact value and entity type, with the same key, produces the same replacement. Separate keys separate linkage; different scope names alone do not. Changes in case, formatting, or detector boundaries may affect matches. Pseudonymization preserves linkage and does **not** make data anonymous.
+
+The same `input_format` and `has_header` options apply as for the other file tools. CSV/TSV pseudonyms use decoded values, preserving headers, table structure, and untouched cell syntax; exact allowlists still apply. Missing scanning folders return the same warnings without blocking explicit pseudonymization or widening routine scope.
+
+Configure a scope in `~/.config/datafog/policy.toml`. Keys never belong in the policy, tool arguments, or environment variables:
+
+```toml
+version = 1
+
+[pseudonymization.scopes.customers]
+key_ref = "customer-analysis"
+key_version = "1"
+backend = "keyring"
+```
+
+Then explicitly create its key locally:
+
+```bash
+datafog-mcp keys create customers
+```
+
+The default backend accepts only OS credential stores supported by `keyring`: macOS Keychain, Windows Credential Manager, Linux Secret Service/libsecret, or KWallet. The OS store must be configured and unlocked. Plaintext, fallback, and chained backends are refused; explicitly select a supported OS backend if your keyring setup normally uses a chain. An unavailable or locked store fails instead of switching to a file. Setup never intentionally replaces an existing key and prints no key material. Concurrent OS-store setup commands use a local `.key-setup.lock` directory beside the policy; a stale lock must be inspected and removed locally before retrying.
+
+For a headless **POSIX** system, explicitly select file storage instead:
+
+```toml
+[pseudonymization.scopes.customers]
+key_ref = "customer-analysis"
+key_version = "1"
+backend = "file"
+key_file = "/home/service/.config/datafog/keys/customers.key"
+```
+
+Create the private parent directory yourself (`mkdir -p` and `chmod 700`), then run the same `keys create customers` command. The path must be absolute (or start with `~`), without `..` or symlinks in any component. Use the actual canonical path if a directory such as `/tmp` is a symlink on your OS. Setup exclusively creates an owner-only `0600` file containing a base64-encoded 256-bit random key; this backend is protected by filesystem permissions, not encryption at rest. Retrieval requires a regular file owned by the current user, exactly `0600`, with one hard link. Symlinks, hard links, malformed keys, and unavailable storage are refused. File storage is not supported on Windows.
+
+Missing keys fail even when the input has no findings. MCP tools never create keys, rotate them, or choose a different backend. Each request resolves one key snapshot. Configured key files and their symbolic/hard-link aliases are refused as data inputs and copy destinations. Copies retain the existing roots, fixed-directory, no-overwrite, permission, and disk-space safeguards; exact allowlists still apply. Tool responses expose paths and counts, never keys, matched values, pseudonyms, or content digests.
+
+To recommend this strategy after a scan, add:
+
+```toml
+[workflow]
+on_findings = "transform"
+transform_strategy = "pseudonymize"
+pseudonym_scope = "customers"
+```
+
+`datafog_policy` and `datafog-mcp policy` expose configured scope names without retrieving keys. A workflow naming an absent scope is invalid. Preserve the key, reference/version, and policy securely if future outputs must remain joinable. Deleting or replacing a key breaks linkage with earlier outputs; no key export, recovery, or rotation command is provided in this release.
 
 ## Uninstall
 
@@ -200,7 +251,7 @@ Then remove the configuration, if you created it with `datafog-mcp roots --edit`
 rm ~/.config/datafog/allowed_roots
 ```
 
-The optional `~/.config/datafog/policy.toml` stores your copy destination, exact allowlists, routine scanning scope, and workflow guidance. Keep it for reinstalling, or remove it separately if you want to discard those settings. Removing it does not delete any copies.
+The optional `~/.config/datafog/policy.toml` stores your copy destination, exact allowlists, routine scanning scope, and workflow guidance. Keep it for reinstalling, or remove it separately if you want to discard those settings. Removing it does not delete any copies or pseudonymization keys.
 
 If you remove both configuration files, `rmdir ~/.config/datafog` removes the now-empty directory.
 
@@ -208,13 +259,15 @@ If you set `DATAFOG_MCP_ALLOWED_ROOTS` in your shell profile, remove it there.
 
 The server keeps no cache, log, or data directory of its own.
 
-Two things remain, on purpose:
+These remain, on purpose:
 
-- **Copies the tools wrote.** These are your files, saved beside their originals or in your configured output directory with `_redacted`, `_masked`, or `_removed` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
+- **Copies the tools wrote.** These are your files, saved beside their originals or in your configured output directory with `_redacted`, `_masked`, `_removed`, or `_pseudonymized` in the name, and they may still hold values the detectors missed. Uninstalling doesn't touch them. To find them, review the results before deleting anything:
 
   ```bash
-  find ~ \( -name '*_redacted.*' -o -name '*_masked.*' -o -name '*_removed.*' \) -type f
+  find ~ \( -name '*_redacted.*' -o -name '*_masked.*' -o -name '*_removed.*' -o -name '*_pseudonymized.*' \) -type f
   ```
+
+- **Pseudonymization keys.** Uninstalling does not delete keys from the OS credential store or your explicitly configured private files. Preserve them for future joins, or delete them manually only when you intend to lose that linkage. A key file in the configuration directory will also prevent `rmdir` from removing it.
 
 - **Claude Code's logs about the server.** Claude Code records its connections to each MCP server and keeps those records after the server is gone. They're under `~/.cache/claude-cli-nodejs/*/mcp-logs-datafog/` on Linux and `~/Library/Caches/claude-cli-nodejs/*/mcp-logs-datafog/` on macOS, and you can delete them.
 
