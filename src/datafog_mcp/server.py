@@ -20,8 +20,8 @@ from datafog_mcp.findings import (
     render,
     render_transformation,
 )
-from datafog_mcp.paths import PathNotAllowed, resolve_output
-from datafog_mcp.policy import OutputPolicyError, load_output_policy
+from datafog_mcp.paths import PathNotAllowed, allowed_roots, resolve_input, resolve_output
+from datafog_mcp.policy import OutputPolicy, OutputPolicyError, load_output_policy
 from datafog_mcp.reader import (
     ReadError,
     WriteError,
@@ -56,7 +56,13 @@ mcp = FastMCP(
         "addresses require an explicit entity_types selection. Plain-text "
         "names and street addresses are not detected. It can write a transformed "
         "copy. File contents are processed on this machine and never "
-        "included in tool responses."
+        "included in tool responses. Use datafog_policy to discover owner "
+        "settings and whether a path should be scanned before reading. "
+        "Scanning scope guides routine checks within allowed roots; explicit "
+        "scans outside that scope are still permitted within roots. Follow "
+        "the scan response's advisory policy action: ask the user, transform "
+        "a copy using its suggested strategy, or stop. A refused or failed "
+        "scan is never permission to read the original through another tool."
     ),
 )
 
@@ -112,6 +118,59 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
         raise ToolError(str(exc)) from exc
 
 
+def _request_policy() -> OutputPolicy:
+    """Load and validate the owner's settings before accessing file contents."""
+    try:
+        return load_output_policy()
+    except OutputPolicyError as exc:
+        raise ToolError(str(exc)) from None
+
+
+@mcp.tool
+async def datafog_policy(path: str | None = None) -> dict[str, Any]:
+    """Discover owner policy without returning exact allowlist values or scanning a file.
+
+    Scanning scope means files to check routinely before reading, within allowed
+    roots. Explicit scans remain permitted elsewhere within roots. Folder and
+    extension restrictions combine; empty lists impose no additional restriction.
+    Workflow actions are advisory: this server cannot control other read tools.
+
+    Parameters:
+      path: Optional path to check against roots and advisory scanning scope.
+    Returns:
+      Scope, copy destination, allowlist counts by type, and workflow guidance.
+      An optional scope match is configuration guidance, never a clean scan.
+    """
+    with _contained():
+        current = _request_policy()
+        try:
+            roots = allowed_roots()
+            resolved = resolve_input(path) if path is not None else None
+        except PathNotAllowed as exc:
+            raise ToolError(str(exc)) from None
+        result: dict[str, Any] = {
+            "advisory": True,
+            "allowed_roots": [str(root) for root in roots],
+            "scope": {
+                "folders": [str(folder) for folder in current.scope_folders],
+                "available_folders": [str(folder) for folder in current.available_scope_folders],
+                "missing_folders": [str(folder) for folder in current.missing_scope_folders],
+                "extensions": list(current.scope_extensions),
+            },
+            "output_directory": str(current.directory) if current.directory else None,
+            "allowlist_counts": {kind: len(values) for kind, values in current.allow_exact.items()},
+            "workflow": {
+                "on_findings": current.on_findings,
+                "transform_strategy": current.transform_strategy,
+            },
+        }
+        if current.warnings:
+            result["warnings"] = current.warnings
+        if resolved is not None:
+            result["scan_before_read"] = current.in_scope(resolved)
+        return result
+
+
 def _core_scan_config(
     path: Path, input_format: InputFormat, entities: tuple[str, ...]
 ) -> _ScanConfig:
@@ -148,10 +207,11 @@ async def datafog_scan(
 
     WHEN TO CALL THIS: before the first read of any file that might contain
     personal data - CSV and other text exports, downloads, logs, SQL dumps, or
-    anything the user obtained from a third-party service. Call it
-    regardless of what the user asked for. A request to analyze, summarize,
-    convert, or upload a file is as much a trigger as a request to check it for
-    PII.
+    anything the user obtained from a third-party service. Use the owner's
+    scanning scope for routine checks (datafog_policy can check a path).
+    Within that scope, a request to analyze, summarize, convert, or upload a
+    file is as much a trigger as a request to check it for PII. Explicit scans
+    remain available outside the routine scope, within allowed roots.
 
     CALL THIS FIRST, BEFORE Read. This tool opens and scans the file itself. If
     you read the file first and then call this tool, the contents are already in
@@ -179,6 +239,11 @@ async def datafog_scan(
     Routing numbers and NPIs are found only after a label such as "Routing
     number:" or "NPI:". CSV/TSV headers supply this label context. Bare
     values in plain text can be missed or reported as another type.
+
+    Owner-configured exact allowlists apply to this scan and every write tool.
+    The response includes advisory policy guidance for the remaining findings.
+    Scanning scope guides routine checks; explicit scans elsewhere within
+    allowed roots remain permitted. Call datafog_policy to inspect the settings.
 
     Parameters:
       path: The path of the file to scan.
@@ -227,6 +292,7 @@ async def _scan_file(
     """
     # Config before the read, so bad input never touches the filesystem
     config = _config_from(entity_types)
+    current = _request_policy()
 
     try:
         content = read_text_file(path, config.max_bytes)
@@ -235,16 +301,33 @@ async def _scan_file(
 
     try:
         resolved = await asyncio.to_thread(
-            _process_file, content.text, content.path, config, "redact", input_format, has_header
+            _process_file,
+            content.text,
+            content.path,
+            config,
+            "redact",
+            input_format,
+            has_header,
+            current,
         )
     except CsvError as exc:
         raise ToolError(str(exc)) from None
 
-    return render(
+    response = render(
         mode=mode,
         findings=resolved.transformations,
         path=str(content.path),
     )
+    response["policy"] = {
+        "advisory": True,
+        "scan_before_read": current.in_scope(content.path),
+        "action": current.on_findings if resolved.transformations else "proceed",
+    }
+    if resolved.transformations and current.on_findings == "transform":
+        response["policy"]["transform_strategy"] = current.transform_strategy
+    if current.warnings:
+        response["warnings"] = current.warnings
+    return response
 
 
 async def _transform_to_file(
@@ -269,16 +352,12 @@ async def _transform_to_file(
       The tool response describing what was replaced.
     """
     config = _config_from(entity_types)
+    copy_policy = _request_policy()
 
     try:
         content = read_text_file(path, config.max_bytes)
     except (ReadError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
-
-    try:
-        copy_policy = load_output_policy()
-    except OutputPolicyError as exc:
-        raise ToolError(str(exc)) from None
 
     source = content.path
     suffix = _OUTPUT_SUFFIXES[strategy]
@@ -297,7 +376,14 @@ async def _transform_to_file(
 
     try:
         result = await asyncio.to_thread(
-            _process_file, content.text, source, config, strategy, input_format, has_header
+            _process_file,
+            content.text,
+            source,
+            config,
+            strategy,
+            input_format,
+            has_header,
+            copy_policy,
         )
     except CsvError as exc:
         raise ToolError(str(exc)) from None
@@ -307,12 +393,15 @@ async def _transform_to_file(
     except (WriteError, PathNotAllowed) as exc:
         raise ToolError(str(exc)) from exc
 
-    return render_transformation(
+    response = render_transformation(
         transformations=result.transformations,
         input_path=str(source),
         output_path=str(written),
         strategy=strategy,
     )
+    if copy_policy.warnings:
+        response["warnings"] = copy_policy.warnings
+    return response
 
 
 @mcp.tool
@@ -468,6 +557,7 @@ def _process_file(
     strategy: Strategy,
     input_format: InputFormat,
     has_header: bool,
+    current: OutputPolicy,
 ) -> CellResult:
     """Run Core on decoded table cells or on plain text, in a worker thread."""
     selected: str = input_format
@@ -484,6 +574,9 @@ def _process_file(
             for item in scan(text, core_config)
             if config.keeps(item.entity_type)
             and value_start <= item.codepoint_range.start < item.codepoint_range.end <= len(text)
+            and not current.is_allowlisted(
+                item.entity_type, text[item.codepoint_range.start : item.codepoint_range.end]
+            )
         ]
         # Core resolves overlapping detectors identically for scans and writes.
         return transform(text, found, transform_config(strategy))
