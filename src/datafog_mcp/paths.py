@@ -246,7 +246,8 @@ def resolve_output(path: str, beside: Path, copy_policy: OutputPolicy | None = N
     Resolve a path the server may write.
 
     Outputs are confined to the owner-configured directory, or the input's
-    directory when none is configured. Configuration directories are refused.
+    directory when none is configured. Configuration directories and output
+    filenames beginning with a dot are refused.
 
     Parameters:
         path: The requested path.
@@ -256,6 +257,8 @@ def resolve_output(path: str, beside: Path, copy_policy: OutputPolicy | None = N
         The resolved path, when policy permits it.
     """
     raw_path = Path(path).expanduser()
+    if raw_path.name.startswith("."):
+        raise PathNotAllowed("output filenames must not begin with a dot")
     destination = raw_path.parent.resolve() / raw_path.name
     resolved = _check(destination)
 

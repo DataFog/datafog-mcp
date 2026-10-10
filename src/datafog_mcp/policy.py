@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -77,6 +78,7 @@ class OutputPolicy:
     transform_strategy: WriteStrategy = "redact"
     pseudonym_scope: str | None = None
     pseudonym_scopes: Mapping[str, PseudonymScope] = field(default_factory=dict)
+    missing_scope_folders: tuple[Path, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "pseudonym_scopes", MappingProxyType(dict(self.pseudonym_scopes)))
@@ -92,10 +94,24 @@ class OutputPolicy:
         """Match an owner-approved value exactly and only for its entity type."""
         return value in self.allow_exact.get(entity_type, frozenset())
 
+    @property
+    def available_scope_folders(self) -> tuple[Path, ...]:
+        """Available folders from this request's validated snapshot."""
+        return tuple(
+            folder for folder in self.scope_folders if folder not in self.missing_scope_folders
+        )
+
+    @property
+    def warnings(self) -> list[str]:
+        """Report missing scope without exposing policy values in file responses."""
+        if self.missing_scope_folders:
+            return ["Configured scanning scope folders are missing; routine scope excludes them."]
+        return []
+
     def in_scope(self, path: Path) -> bool:
         """Test advisory scope; callers must enforce roots separately first."""
         folder_match = not self.scope_folders or any(
-            path == folder or folder in path.parents for folder in self.scope_folders
+            path == folder or folder in path.parents for folder in self.available_scope_folders
         )
         extension_match = (
             not self.scope_extensions or path.suffix.casefold() in self.scope_extensions
@@ -117,7 +133,7 @@ def _strings(value: object) -> tuple[str, ...]:
     return tuple(cast(list[str], value))
 
 
-def _scope_paths(value: object) -> tuple[Path, ...]:
+def _scope_paths(value: object) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
     # Import here: the path access layer also loads this policy for writes.
     from .paths import DENIED_DIR_NAMES, PathNotAllowed, allowed_roots
 
@@ -126,22 +142,33 @@ def _scope_paths(value: object) -> tuple[Path, ...]:
     except PathNotAllowed:
         raise OutputPolicyError("allowed roots cannot be used to validate scanning scope") from None
     folders: list[Path] = []
+    missing: list[Path] = []
     for raw in _strings(value):
         try:
             folder = Path(raw).expanduser()
             if not folder.is_absolute():
                 raise OutputPolicyError("scanning scope folders must be absolute or start with ~")
-            folder = folder.resolve(strict=True)
-            if not folder.is_dir():
-                raise OutputPolicyError("scanning scope folders must already exist as directories")
+            try:
+                folder = folder.resolve(strict=True)
+            except FileNotFoundError:
+                # Resolve existing ancestors/symlinks even for a missing leaf;
+                # absence must never bypass root or credential checks below.
+                folder = folder.resolve(strict=False)
         except (OSError, RuntimeError):
             raise OutputPolicyError("scanning scope folder cannot be resolved") from None
         if any(part.casefold() in DENIED_DIR_NAMES for part in folder.parts):
             raise OutputPolicyError("scanning scope folder is in a refused credential directory")
         if not any(folder == root or root in folder.parents for root in roots):
             raise OutputPolicyError("scanning scope folder is outside allowed roots")
+        try:
+            if not stat.S_ISDIR(folder.stat().st_mode):
+                raise OutputPolicyError("scanning scope folders must name directories")
+        except FileNotFoundError:
+            missing.append(folder)
+        except OSError:
+            raise OutputPolicyError("scanning scope folder cannot be inspected") from None
         folders.append(folder)
-    return tuple(folders)
+    return tuple(folders), tuple(missing)
 
 
 def _identifier(value: object) -> str:
@@ -220,7 +247,7 @@ def load_output_policy() -> OutputPolicy:
     exact = _table(allow.get("exact", {}), set(SUPPORTED_ENTITIES))
     allow_exact = {kind: frozenset(_strings(values)) for kind, values in exact.items()}
     scope = _table(data.get("scope", {}), {"folders", "extensions"})
-    folders = _scope_paths(scope.get("folders", []))
+    folders, missing_folders = _scope_paths(scope.get("folders", []))
     extensions = _strings(scope.get("extensions", []))
     if any(not re.fullmatch(r"\.[A-Za-z0-9]+", value) for value in extensions):
         raise OutputPolicyError("scanning scope extensions must be dot-prefixed file extensions")
@@ -252,4 +279,5 @@ def load_output_policy() -> OutputPolicy:
         strategy,
         selected_scope,
         scopes,
+        missing_folders,
     )
