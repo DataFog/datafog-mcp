@@ -77,5 +77,12 @@ def test_pseudonym_schema_requires_scope_and_has_no_key_management_tools() -> No
     schemas = _schemas()
     schema = schemas["datafog_pseudonymize"]
     assert set(schema["required"]) == {"path", "scope"}
-    assert set(schema["properties"]) == {"path", "scope", "output_path", "entity_types"}
+    assert set(schema["properties"]) == {
+        "path",
+        "scope",
+        "output_path",
+        "entity_types",
+        "input_format",
+        "has_header",
+    }
     assert set(schemas) == set(TOOLS) | {"datafog_policy"}

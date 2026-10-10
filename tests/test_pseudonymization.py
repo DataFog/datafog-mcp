@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import json
 import os
 import subprocess
@@ -204,10 +205,14 @@ def test_failures_never_leak_values_or_keys(
     assert not source.with_name("contacts_pseudonymized.txt").exists()
 
 
+@pytest.mark.parametrize("suffix", ["txt", "csv", "tsv"])
 def test_key_snapshot_is_reused(
-    configured: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+    suffix: str, configured: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source, _ = configured
+    if suffix != "txt":
+        source = source.with_suffix("." + suffix)
+        source.write_text("email\njane@example.com\njane@example.com\n")
     original = keys._read_file
     reads: list[Path] = []
 
@@ -304,3 +309,151 @@ def test_pseudonym_copy_permissions_and_roots(
     with pytest.raises(ToolError):
         call(path=str(source), scope="customers", output_path=str(source.with_name("refused.txt")))
     assert not source.with_name("refused.txt").exists()
+
+
+@pytest.mark.parametrize("delimiter,suffix", [(",", "csv"), ("\t", "tsv")])
+def test_table_pseudonyms_preserve_linkage_allowlists_and_structure(
+    delimiter: str, suffix: str, configured: tuple[Path, Path]
+) -> None:
+    source, key = configured
+    with policy.POLICY_FILE.open("a") as handle:
+        handle.write('\n[allow.exact]\nEMAIL = ["public@example.com"]\nNPI = ["1234567893"]\n')
+    source = source.with_suffix("." + suffix)
+    original = (
+        f"email{delimiter}NPI{delimiter}note\r\n"
+        f'"jane@example.com"{delimiter}1234567893{delimiter}"a ""quoted"" note"\r\n'
+        f'"jane@example.com"{delimiter}1234567893{delimiter}public@example.com\r\n'
+    )
+    source.write_bytes(original.encode())
+    result = call(path=str(source), scope="customers", entity_types=["EMAIL", "NPI"])
+    data = result.structured_content
+    assert data is not None and data["counts"] == {"EMAIL": 2}
+    output = Path(data["output_path"]).read_bytes().decode()
+    rows = list(csv.reader(output.splitlines(), delimiter=delimiter))
+    assert rows[1][0] == rows[2][0] and rows[1][0] != "jane@example.com"
+    assert rows[1][1] == rows[2][1] == "1234567893"
+    assert rows[1][2] == 'a "quoted" note'
+    assert rows[2][2] == "public@example.com"
+    assert output.count("\r\n") == 3
+    assert source.read_bytes().decode() == original
+    response = str(result.content) + json.dumps(data)
+    assert rows[1][0] not in response
+    assert key.read_text().strip() not in response
+    # The same decoded value has the same pseudonym without CSV header context.
+    plain = source.with_name("other.txt")
+    plain.write_text("jane@example.com")
+    plain_result = call(
+        path=str(plain), scope="customers", entity_types=["EMAIL"]
+    ).structured_content
+    assert plain_result is not None
+    assert Path(plain_result["output_path"]).read_text() == rows[1][0]
+
+
+def test_pseudonymization_warns_on_missing_scope_without_widening_it(
+    configured: tuple[Path, Path],
+) -> None:
+    source, _ = configured
+    missing = source.parent / "missing"
+    with policy.POLICY_FILE.open("a") as handle:
+        handle.write(
+            f'\n[scope]\nfolders = ["{missing}"]\n'
+            '[workflow]\non_findings = "transform"\n'
+            'transform_strategy = "pseudonymize"\npseudonym_scope = "customers"\n'
+        )
+    scanned = call("datafog_scan", path=str(source)).structured_content
+    assert scanned is not None and scanned["warnings"]
+    assert scanned["policy"]["scan_before_read"] is False
+    assert scanned["policy"]["pseudonym_scope"] == "customers"
+    result = call(path=str(source), scope="customers").structured_content
+    assert result is not None and result["warnings"]
+    assert "jane@example.com" not in Path(result["output_path"]).read_text()
+    discovery = call("datafog_policy", path=str(missing / "future.txt")).structured_content
+    assert discovery is not None and discovery["scan_before_read"] is False
+    missing.mkdir()
+    discovery = call("datafog_policy", path=str(missing / "future.txt")).structured_content
+    assert discovery is not None and discovery["scan_before_read"] is True
+    assert "warnings" not in discovery
+
+
+@pytest.mark.parametrize(
+    "input_format,text",
+    [
+        ("env", "EMAIL=jane@example.com\n"),
+        ("sql", "SELECT 'jane@example.com';\n"),
+        ("text", "jane@example.com\n"),
+    ],
+)
+def test_pseudonymization_preserves_core_format_and_detector_selection(
+    input_format: str, text: str, configured: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, _ = configured
+    source.write_text(text)
+    original_scan = server.scan
+    selections: list[Any] = []
+
+    def scan(text: str, config: Any) -> Any:
+        selections.append(config)
+        return original_scan(text, config)
+
+    monkeypatch.setattr(server, "scan", scan)
+    result = call(
+        path=str(source), scope="customers", entity_types=["EMAIL"], input_format=input_format
+    )
+    assert selections == [{"format": input_format, "entities": ["EMAIL"]}]
+    data = result.structured_content
+    assert data is not None and data["counts"] == {"EMAIL": 1}
+    output = Path(data["output_path"]).read_text()
+    assert "jane@example.com" not in output
+    if input_format == "env":
+        assert output.startswith("EMAIL=") and output.endswith("\n")
+    if input_format == "sql":
+        assert output.startswith("SELECT '") and output.endswith("';\n")
+
+
+@pytest.mark.parametrize("size", [10_000_000, 10_000_001])
+def test_pseudonymization_honors_current_byte_limit(
+    size: int, configured: tuple[Path, Path]
+) -> None:
+    source, _ = configured
+    tail = "\njane@example.com"
+    source.write_bytes(b"x" * (size - len(tail)) + tail.encode())
+    if size > 10_000_000:
+        with pytest.raises(ToolError, match="over the 10000000 limit"):
+            call(path=str(source), scope="customers", entity_types=["EMAIL"])
+        assert not source.with_name("contacts_pseudonymized.txt").exists()
+    else:
+        result = call(
+            path=str(source), scope="customers", entity_types=["EMAIL"]
+        ).structured_content
+        assert result is not None and result["entity_count"] == 1
+        assert b"jane@example.com" not in Path(result["output_path"]).read_bytes()
+
+
+@pytest.mark.parametrize("has_header", [True, False])
+def test_pseudonymization_supports_explicit_headerless_tables(
+    has_header: bool, configured: tuple[Path, Path]
+) -> None:
+    source, _ = configured
+    source.write_text("jane@example.com\njane@example.com\n")
+    data = call(
+        path=str(source), scope="customers", input_format="csv", has_header=has_header
+    ).structured_content
+    assert data is not None and data["entity_count"] == (1 if has_header else 2)
+    rows = list(csv.reader(Path(data["output_path"]).read_text().splitlines()))
+    if has_header:
+        assert rows[0] == ["jane@example.com"]
+    else:
+        assert rows[0] == rows[1] and rows[0] != ["jane@example.com"]
+
+
+def test_pseudonymization_refuses_ambiguous_table_without_output(
+    configured: tuple[Path, Path],
+) -> None:
+    source, key = configured
+    source = source.with_suffix(".csv")
+    source.write_text('email\n"jane@example.com\n')
+    saved_key = key.read_bytes()
+    with pytest.raises(ToolError, match="Malformed CSV"):
+        call(path=str(source), scope="customers")
+    assert not source.with_name("contacts_pseudonymized.csv").exists()
+    assert key.read_bytes() == saved_key
