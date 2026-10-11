@@ -1,0 +1,11 @@
+-- Dump of table users
+-- Server version 8.0.36
+INSERT INTO users (id, email, phone, dob, ssn, zip, created_at) VALUES
+  (1, '[[EMAIL|li.wei@example.com]]', '[[PHONE|(206) 555-0134]]', '[[DATE|1984-05-30]]', '[[SSN|512-34-6789]]', '[[ZIP_CODE|98101]]', '2026-01-04 10:22:31'),
+  (2, '[[EMAIL|p.nair@example.in]]', '[[PHONE|206-555-0177]]', '[[DATE|1991-12-01]]', '[[SSN|623-90-1145]]', '[[ZIP_CODE|98109]]', '2026-02-11 17:05:09'),
+  (3, '[[EMAIL|o.haddad@example.com]]', '[[PHONE|+1 425 555 0101]]', '[[DATE|1978-08-19]]', '[[SSN|345-12-0987]]', '[[ZIP_CODE|98004]]', '2026-03-28 08:44:50');
+
+INSERT INTO payment_methods (user_id, card_number, routing_number, account_last4) VALUES
+  (1, '[[CREDIT_CARD|4012888888881881]]', '[[US_ROUTING_NUMBER|021000021]]', '6789'),
+  -- routing: [[US_ROUTING_NUMBER|011000015]] (migrated from legacy ledger)
+  (2, '[[CREDIT_CARD|5105105105105100]]', '[[US_ROUTING_NUMBER|011000015]]', '1145');
