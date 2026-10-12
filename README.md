@@ -61,17 +61,17 @@ These clips use fictional customer records. Each shows a real Claude Code intera
 
 ### Scan a customer export
 
-Find emails, SSNs, and payment card numbers without returning the matched values. CSV results include record and column locations; plain-text results include character offsets.
+Check a customer export for emails and phone numbers without returning the matched values.
 
-![Claude Code scans a fictional customer CSV and text file, then reports finding counts and locations.](docs/demo/scan.gif)
+![Claude Code checks customers.csv and reports three emails and three phone numbers.](docs/demo/scan.gif)
 
-### Create a transformed copy
+### Create a redacted copy
 
-Choose **redact** (typed labels), **mask** (same-length replacement characters), or **remove** (delete matched values). The original stays intact, and existing copies are never overwritten.
+Replace emails and phone numbers with typed labels in a new copy. The original stays intact, and existing copies are never overwritten.
 
-![Claude Code creates redacted, masked, and removed copies of a fictional customer CSV, replacing 11 matched values in each.](docs/demo/transform.gif)
+![Claude Code creates customers_redacted.csv with three emails and three phone numbers redacted, keeping the original unchanged.](docs/demo/transform.gif)
 
-The transform demo explicitly selects email, SSN, credit card, phone, date, and ZIP checks. An explicit selection **replaces** the defaults. Names remain in these copies; a clean rescan does not prove anonymity.
+These demos select email and phone checks; phone detection is opt-in. An explicit selection **replaces** the defaults. Other columns remain unchanged.
 
 ## Five tools, one local workflow
 
