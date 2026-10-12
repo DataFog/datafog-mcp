@@ -4,7 +4,7 @@ An MCP server that lets an AI agent check a file for personally identifiable inf
 
 Detection runs locally on the [datafog-core](https://github.com/DataFog/datafog-core) engine.
 
-**Status: beta (0.1.0).** Tested with Claude Code. CI runs on Linux, and development uses macOS; Windows is untested.
+**Status: stable (1.0.0).** Tested with Claude Code. CI runs on Linux, and development uses macOS; Windows is untested.
 
 **What stays on the machine.** File contents are read and processed locally, and the server makes no network requests while running. FastMCP's update check is switched off, and its OpenTelemetry hooks do nothing unless you install an OpenTelemetry SDK and configure an exporter yourself. Tool responses are a different matter: they go into the agent's context, and the agent sends its context to its model provider. That is why responses carry no file contents or matched values. Installing the server downloads packages, which is separate from running it.
 
