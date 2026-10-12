@@ -4,7 +4,7 @@ datafog-mcp checks files for personal data and credentials on behalf of AI agent
 
 ## Reporting a vulnerability
 
-Report it privately through GitHub: on the repository's **Security** tab, choose **Report a vulnerability**. If that isn't available to you, email hi@datafog.ai.
+Report it privately through GitHub using [Report a vulnerability](https://github.com/DataFog/datafog-mcp/security/advisories/new). If that isn't available to you, email hi@datafog.ai.
 
 Please don't open a public issue or pull request for a vulnerability, and don't include real personal data in a report. A synthetic example is enough.
 
