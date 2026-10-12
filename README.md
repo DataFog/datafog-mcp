@@ -4,6 +4,8 @@ An MCP server that lets an AI agent check a file for personally identifiable inf
 
 Detection runs locally on the [datafog-core](https://github.com/DataFog/datafog-core) engine.
 
+**Status: stable (1.0.0).** Tested with Claude Code. CI runs on Linux, and development uses macOS; Windows is untested.
+
 **What stays on the machine.** File contents are read and processed locally, and the server makes no network requests while running. FastMCP's update check is switched off, and its OpenTelemetry hooks do nothing unless you install an OpenTelemetry SDK and configure an exporter yourself. Tool responses are a different matter: they go into the agent's context, and the agent sends its context to its model provider. That is why responses carry no file contents or matched values. Installing the server downloads packages, which is separate from running it.
 
 **What this does and does not protect.** No tool response contains file contents or matched values, so "is this file sensitive" can be answered without the answer carrying the sensitive parts. That is the whole of the guarantee. Note that the agent can still open the file directly, and sometimes will.
@@ -25,10 +27,8 @@ What responses do carry:
 
 ## Install
 
-Not yet on PyPI. From a checkout:
-
 ```bash
-uv tool install .
+uv tool install datafog-mcp
 ```
 
 That puts `datafog-mcp` on your `PATH`. Register it with your MCP client.
@@ -220,11 +220,17 @@ Two things remain, on purpose:
 
 For another MCP client, remove the `datafog` entry from that client's MCP configuration in place of the `claude mcp remove` step.
 
+## Security
+
+To report a vulnerability, see [SECURITY.md](https://github.com/DataFog/datafog-mcp/blob/main/SECURITY.md). Please don't open a public issue.
+
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the changelog policy and exemption process.
+See [CONTRIBUTING.md](https://github.com/DataFog/datafog-mcp/blob/main/CONTRIBUTING.md) for the changelog policy and exemption process.
 
-MCP passes its default or explicit `entity_types` to Core before scanning, including decoded CSV/TSV cells. Only selected detectors run. This requires datafog-core 0.4.3 or later.
+To install from a checkout instead of PyPI, run `uv tool install .` from the repository root.
+
+MCP passes its default or explicit `entity_types` to Core before scanning, including decoded CSV/TSV cells. Only selected detectors run. This installation requires datafog-core 0.4.4 or later.
 
 ```bash
 uv sync --group dev

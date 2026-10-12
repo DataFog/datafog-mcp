@@ -2,13 +2,11 @@
 
 Notable changes to datafog-mcp. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - Unreleased
+## [1.0.0] - 2026-10-12
 
 First release: an MCP server that checks a file for personal data and credentials, and writes a cleaned copy, without file contents or matched values ever appearing in a tool response.
 
 ### Added
-
-- Pass default or explicit entity selections to Core before detection for text, ENV/SQL, and CSV/TSV cell scans. Unselected detectors do not run; findings and copy behavior retain their existing selection rules. Requires datafog-core 0.4.3 or later.
 
 - `datafog_scan` reports the entity types, per-type counts, and character offsets found in a file. A value two detectors both match is reported once, as the type the write tools would replace it with.
 - `datafog_scan` lists offsets for up to 700 findings. Above that it returns complete counts without offsets, to bound response size for plain text and CSV/TSV.
@@ -17,10 +15,14 @@ First release: an MCP server that checks a file for personal data and credential
 - Allowed roots confine every read and write to configured directories. `datafog-mcp roots` shows and edits them. Credential directories such as `.ssh` are always refused.
 - CSV/TSV scans use decoded cell values with header context and report numeric record/column locations alongside original-source offsets. Writes preserve table structure and untouched syntax, with explicit headerless/plain-text options. Ragged rows, trailing blank lines, and literal quotes in unquoted fields are preserved; ambiguous tables are refused with record/column locations and plain-text scan guidance. Responses contain no header text or cell values.
 - Email scans and transformed copies preserve ENV assignment syntax and surrounding SQL string quotes using datafog-core 0.4.2. All four tools infer these email boundaries from common ENV/SQL filenames and accept an `input_format` override; other files retain plain-text matching.
-
 - `DATE`, `ZIP_CODE`, and `PHONE` are opt-in for scans and all write tools, reducing matches on operational timestamps and numeric IDs. Select them explicitly through `entity_types`; an explicit list replaces the defaults. Detection coverage and advisory-use limitations are documented more precisely.
+- Only the selected entity types are detected: scans and writes pass the default or explicit `entity_types` to Core, so unselected detectors don't run. Requires datafog-core 0.4.3 or later.
 - Owners can choose one copy destination in `policy.toml` using `datafog-mcp policy --edit`. Tool-selected filenames stay within that directory, subject to allowed roots and directory denials; absent policy keeps sibling copies. Invalid copy policy or insufficient destination disk space refuses writes. Output filenames beginning with `.` are refused; hidden inputs remain readable and receive visible default copy names.
 - The same policy supports exact per-entity allowlists, routine scanning folders/extensions constrained by allowed roots, and advisory ask/transform/stop guidance. `datafog_policy` exposes settings without exact allowlist values; each scan/write validates a fresh immutable snapshot, and invalid policy refuses access. Missing scope folders are reported as inactive with warnings, without blocking explicit scans/writes or widening routine scope.
+
+### Changed
+
+- Require datafog-core 0.4.4 or later, reducing phone matches on Unix timestamps and credit-card matches inside decimal numbers.
 
 ### Security
 

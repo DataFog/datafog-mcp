@@ -183,7 +183,7 @@ def _scan_text(tmp_path: Path, text: str, **arguments: Any) -> dict[str, Any]:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("Provider NPI: 1234567893\n", {"NPI": 1}),
+        ("Provider NPI: 2125550100\n", {"NPI": 1}),
         ("DATABASE_URL=postgres://admin:hunter2@db.example.com:5432/prod\n", {"CREDENTIAL_URI": 1}),
     ],
     ids=["npi-is-not-also-a-phone", "credential-uri-is-not-also-an-email"],
@@ -214,7 +214,7 @@ def test_narrowing_keeps_the_requested_type(tmp_path: Path) -> None:
     Parameters:
       tmp_path: Directory for the input.
     """
-    result = _scan_text(tmp_path, "Provider NPI: 1234567893\n", entity_types=["PHONE"])
+    result = _scan_text(tmp_path, "Provider NPI: 2125550100\n", entity_types=["PHONE"])
 
     assert result["counts"] == {"PHONE": 1}
 
