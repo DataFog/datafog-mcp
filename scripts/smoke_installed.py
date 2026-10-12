@@ -26,7 +26,7 @@ from fastmcp.client.transports import StdioTransport
 import datafog_mcp
 
 SECRET = "jack.smith@example.com"
-TOOLS = {"datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove"}
+TOOLS = {"datafog_policy", "datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove"}
 
 
 def _require(condition: bool, message: str) -> None:
@@ -92,6 +92,12 @@ async def _check_session(server: str, workdir: Path, expected: str) -> None:
 
         names = {tool.name for tool in await client.list_tools()}
         _require(names == TOOLS, f"tools listed: {sorted(names)}")
+
+        policy = await client.call_tool("datafog_policy", {"path": str(source)})
+        guidance = policy.structured_content or {}
+        _require(guidance.get("advisory") is True, "policy is not advisory")
+        _require(guidance.get("scan_before_read") is True, "source is outside routine scope")
+        _require(SECRET not in str(policy.content), "policy returned the value")
 
         scan = await client.call_tool("datafog_scan", {"path": str(source)})
         _require((scan.structured_content or {}).get("counts", {}).get("EMAIL") == 1, "EMAIL")

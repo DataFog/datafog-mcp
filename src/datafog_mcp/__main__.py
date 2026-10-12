@@ -18,6 +18,7 @@ from .paths import (
     PolicyError,
     policy,
 )
+from .policy import POLICY_FILE, POLICY_TEMPLATE, OutputPolicyError, load_output_policy
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -25,7 +26,7 @@ def _build_parser() -> argparse.ArgumentParser:
     Construct the argument parser.
 
     Returns:
-      A parser carrying the serve and roots subcommands.
+      A parser carrying the serve, roots, and policy subcommands.
     """
     parser = argparse.ArgumentParser(
         prog="datafog-mcp",
@@ -37,6 +38,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     roots = sub.add_parser("roots", help="Show the directories datafog may read and write")
     roots.add_argument("--edit", action="store_true", help="Open the roots file in $EDITOR")
+
+    copies = sub.add_parser("policy", help="Show owner scanning, copy, and workflow settings")
+    copies.add_argument("--edit", action="store_true", help="Open policy.toml in $EDITOR")
 
     return parser
 
@@ -90,6 +94,33 @@ def main() -> None:
     """
     args = _build_parser().parse_args()
 
+    if args.command == "policy":
+        if args.edit:
+            _edit_policy()
+        else:
+            try:
+                current = load_output_policy()
+            except OutputPolicyError as exc:
+                raise SystemExit(f"datafog-mcp: {exc}") from None
+            print(f"Config file: {POLICY_FILE}")
+            print(f"Copy destination: {current.directory or 'beside the input'}")
+            print("Files to scan before reading (within allowed roots):")
+            for folder in current.scope_folders:
+                status = " (missing; inactive)" if folder in current.missing_scope_folders else ""
+                print(f"  {folder}{status}")
+            if not current.scope_folders:
+                print("  all allowed directories")
+            for warning in current.warnings:
+                print(f"Warning: {warning}")
+            print("Extensions: " + (", ".join(current.scope_extensions) or "all"))
+            print(f"On findings: {current.on_findings} (advisory)")
+            print(f"Suggested transformation: {current.transform_strategy}")
+            print(
+                "Exact allowlist counts: "
+                + ", ".join(f"{kind}={len(values)}" for kind, values in current.allow_exact.items())
+            )
+        return
+
     if args.command == "roots":
         if args.edit:
             _edit_roots()
@@ -100,6 +131,27 @@ def main() -> None:
     from .server import run_server
 
     run_server()
+
+
+def _edit_policy() -> None:
+    """Create a private policy template if absent, then open the owner's editor."""
+    if os.path.lexists(POLICY_FILE):
+        if not POLICY_FILE.is_file():
+            raise SystemExit("datafog-mcp: output policy is not a regular file")
+    else:
+        POLICY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            descriptor = os.open(POLICY_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(POLICY_TEMPLATE)
+        except OSError:
+            raise SystemExit("datafog-mcp: cannot create output policy") from None
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
+    command = [*shlex.split(editor), str(POLICY_FILE)]
+    try:
+        subprocess.run(command, check=False)
+    except FileNotFoundError:
+        raise SystemExit(f"datafog-mcp: editor not found: {command[0]}") from None
 
 
 if __name__ == "__main__":

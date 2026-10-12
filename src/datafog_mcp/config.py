@@ -17,13 +17,13 @@ def _text_scan_entities() -> frozenset[str]:
     """
     Ask the engine which types a plain text scan can report.
 
-    Only default-activated, text-scoped types qualify. The server calls
-    scan(text) with no config, so a type that needs a locale, a config flag,
-    or structured input would never fire. Accepting one would let a caller
+    Only default-activated, text-scoped types qualify. Selecting a detector
+    does not activate a required locale or structured-input capability,
+    so types needing either would never fire. Accepting one would let a caller
     request it and get an empty result reported as success.
 
     Returns:
-      The entity types scan(text) can report.
+      The entity types a text scan can report.
     """
     return frozenset(
         name
@@ -35,27 +35,26 @@ def _text_scan_entities() -> frozenset[str]:
 SUPPORTED_ENTITIES: frozenset[str] = _text_scan_entities()
 
 # Which types are on by default is a product decision, so this stays
-# explicit rather than following the engine's list. IP_ADDRESS is
-# supported but opt-in.
+# explicit rather than following the engine's list. DATE, ZIP_CODE, PHONE,
+# and IP_ADDRESS are supported but opt-in.
 DEFAULT_ENTITIES: tuple[str, ...] = (
     "API_KEY",
     "BEARER_TOKEN",
     "CREDENTIAL_URI",
     "CREDIT_CARD",
-    "DATE",
     "EMAIL",
     "JWT",
     "NPI",
-    "PHONE",
     "PRIVATE_KEY",
     "SSN",
     "US_ROUTING_NUMBER",
-    "ZIP_CODE",
 )
 
 Strategy = Literal["mask", "redact", "remove"]
 
-DEFAULT_MAX_BYTES = 1_048_576
+# Decimal megabytes. Benchmarks in docs/validation/file-size-benchmarks.md
+# (PR #59) show every format and entity density within budget at 10 MB.
+DEFAULT_MAX_BYTES = 10_000_000
 
 
 @dataclass(frozen=True)

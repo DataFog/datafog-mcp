@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from datafog_mcp import policy
 from datafog_mcp.paths import ALLOWED_ROOTS_VAR
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +35,7 @@ def allow_test_paths(
     """
     roots = os.pathsep.join([str(tmp_path_factory.getbasetemp().resolve()), str(REPO_ROOT)])
     monkeypatch.setenv(ALLOWED_ROOTS_VAR, roots)
+    monkeypatch.setattr(policy, "POLICY_FILE", tmp_path_factory.getbasetemp() / "policy.toml")
 
 
 @pytest.fixture

@@ -22,6 +22,16 @@ SOURCE = Path(__file__).parent / "data" / "garmin_export.csv"
 EMAIL = "jack.smith@example.com"
 PHONE = "415-555-0182"
 POSTAL = "94117"
+DATE = "1995-08-12"
+TOOLS = ["datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove"]
+
+
+@pytest.fixture
+def identifiers(tmp_path: Path) -> Path:
+    """A file with distinct email, phone, date, and ZIP matches."""
+    source = tmp_path / "identifiers.txt"
+    source.write_text(f"Email: {EMAIL}\nPhone: {PHONE}\nDOB: {DATE}\nZIP: {POSTAL}\n")
+    return source
 
 
 def _call(tool: str, **arguments: Any) -> dict[str, Any]:
@@ -41,6 +51,43 @@ def _call(tool: str, **arguments: Any) -> dict[str, Any]:
             return result.structured_content or {}
 
     return asyncio.run(run())
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_noisy_types_are_not_selected_by_default(identifiers: Path, tool: str) -> None:
+    """Defaults detect/transform the email while preserving opt-in values."""
+    before = identifiers.read_text()
+    result = _call(tool, path=str(identifiers))
+
+    assert result["counts"] == {"EMAIL": 1}
+    assert result["entity_count"] == 1
+    assert identifiers.read_text() == before
+    if tool != "datafog_scan":
+        written = Path(result["output_path"]).read_text()
+        assert EMAIL not in written
+        for value in (PHONE, DATE, POSTAL):
+            assert value in written
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+@pytest.mark.parametrize(
+    ("entity", "value"), [("PHONE", PHONE), ("DATE", DATE), ("ZIP_CODE", POSTAL)]
+)
+def test_opt_in_selection_replaces_defaults(
+    identifiers: Path, tool: str, entity: str, value: str
+) -> None:
+    """Explicit opt-in works for every tool and leaves unselected values alone."""
+    before = identifiers.read_text()
+    result = _call(tool, path=str(identifiers), entity_types=[entity])
+
+    assert result["counts"] == {entity: 1}
+    assert result["entity_count"] == 1
+    assert identifiers.read_text() == before
+    if tool != "datafog_scan":
+        written = Path(result["output_path"]).read_text()
+        assert value not in written
+        for unselected in {EMAIL, PHONE, DATE, POSTAL} - {value}:
+            assert unselected in written
 
 
 @pytest.fixture
@@ -69,7 +116,7 @@ def test_redact_writes_labelled_placeholders(export: Path) -> None:
     assert written == export.with_name("garmin_export_redacted.csv")
     assert EMAIL not in text
     assert "[EMAIL]" in text
-    assert "[PHONE]" in text
+    assert PHONE in text
     assert result["strategy"] == "redact"
 
 
@@ -81,8 +128,9 @@ def test_mask_preserves_length(export: Path) -> None:
     text = written.read_text(encoding="utf-8")
 
     assert written == export.with_name("garmin_export_masked.csv")
-    assert PHONE not in text
-    assert "*" * len(PHONE) in text
+    assert EMAIL not in text
+    assert "*" * len(EMAIL) in text
+    assert PHONE in text
     assert result["strategy"] == "mask"
 
 

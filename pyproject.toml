@@ -20,8 +20,9 @@ classifiers = [
 dependencies = [
     "mcp>=1.2.0",
     "fastmcp>=3,<4",
-    "datafog-core>=0.4.1,<0.5",
+    "datafog-core>=0.4.3,<0.5",
     "pydantic>=2,<3",
+    "tomli>=2; python_version < '3.11'",
 ]
 
 [dependency-groups]
@@ -32,9 +33,11 @@ dev = [
     "mypy>=1.11.0",
     "pyright>=1.1.398",
     "pre-commit>=3.8.0",
+    "tomli>=2; python_version < '3.11'",
     "coverage>=7.6.0",
 ]
 ci = [
+    "tomli>=2; python_version < '3.11'",
     "ruff>=0.8.0",
     "pytest>=8.3.0",
     "pytest-cov>=6.0.0",

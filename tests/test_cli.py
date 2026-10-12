@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,50 @@ import pytest
 
 from datafog_mcp import __main__ as cli
 from datafog_mcp import paths
+from datafog_mcp import policy as copy_policy
 from datafog_mcp.paths import ALLOWED_ROOTS_VAR
+
+
+def test_policy_editor_creates_template_and_preserves_existing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    location = tmp_path / "config" / "policy.toml"
+    monkeypatch.setattr(cli, "POLICY_FILE", location)
+    monkeypatch.setattr(copy_policy, "POLICY_FILE", location)
+    monkeypatch.setenv("VISUAL", "editor --wait")
+    calls = _capture_editor(monkeypatch)
+    _run(monkeypatch, "policy", "--edit")
+    assert calls == [["editor", "--wait", str(location)]]
+    assert copy_policy.load_output_policy().directory is None
+    if os.name == "posix":
+        assert location.stat().st_mode & 0o777 == 0o600
+    location.write_text("version = 1\n# owner choice", encoding="utf-8")
+    _run(monkeypatch, "policy", "--edit")
+    assert location.read_text(encoding="utf-8") == "version = 1\n# owner choice"
+
+
+def test_policy_reports_configured_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    location = tmp_path / "policy.toml"
+    location.write_text(
+        f'version = 1\n[output]\ndirectory = "{tmp_path.as_posix()}"', encoding="utf-8"
+    )
+    monkeypatch.setattr(cli, "POLICY_FILE", location)
+    monkeypatch.setattr(copy_policy, "POLICY_FILE", location)
+    _run(monkeypatch, "policy")
+    assert f"Copy destination: {tmp_path.resolve()}" in capsys.readouterr().out
+
+
+def test_policy_reports_invalid_config_without_dumping_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    location = tmp_path / "policy.toml"
+    location.write_text("secret@example.com", encoding="utf-8")
+    monkeypatch.setattr(copy_policy, "POLICY_FILE", location)
+    with pytest.raises(SystemExit, match="valid UTF-8 TOML") as excinfo:
+        _run(monkeypatch, "policy")
+    assert "secret@example.com" not in str(excinfo.value)
 
 
 def _run(monkeypatch: pytest.MonkeyPatch, *argv: str) -> None:
