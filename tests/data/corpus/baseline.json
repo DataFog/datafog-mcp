@@ -1,0 +1,191 @@
+{
+  "engine": "datafog-core 0.4.1",
+  "totals": {
+    "API_KEY": {
+      "labeled": 3,
+      "found": 2,
+      "correct": 2,
+      "precision": 1.0,
+      "recall": 0.667
+    },
+    "BEARER_TOKEN": {
+      "labeled": 1,
+      "found": 1,
+      "correct": 1,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "CREDENTIAL_URI": {
+      "labeled": 4,
+      "found": 2,
+      "correct": 2,
+      "precision": 1.0,
+      "recall": 0.5
+    },
+    "CREDIT_CARD": {
+      "labeled": 7,
+      "found": 7,
+      "correct": 7,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "DATE": {
+      "labeled": 12,
+      "found": 12,
+      "correct": 9,
+      "precision": 0.75,
+      "recall": 0.75
+    },
+    "EMAIL": {
+      "labeled": 13,
+      "found": 15,
+      "correct": 8,
+      "precision": 0.533,
+      "recall": 0.615
+    },
+    "IP_ADDRESS": {
+      "labeled": 3,
+      "found": 3,
+      "correct": 3,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "JWT": {
+      "labeled": 2,
+      "found": 1,
+      "correct": 1,
+      "precision": 1.0,
+      "recall": 0.5
+    },
+    "NPI": {
+      "labeled": 4,
+      "found": 2,
+      "correct": 2,
+      "precision": 1.0,
+      "recall": 0.5
+    },
+    "PHONE": {
+      "labeled": 14,
+      "found": 22,
+      "correct": 13,
+      "precision": 0.591,
+      "recall": 0.929
+    },
+    "PRIVATE_KEY": {
+      "labeled": 1,
+      "found": 1,
+      "correct": 1,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "SSN": {
+      "labeled": 10,
+      "found": 11,
+      "correct": 10,
+      "precision": 0.909,
+      "recall": 1.0
+    },
+    "US_ROUTING_NUMBER": {
+      "labeled": 4,
+      "found": 1,
+      "correct": 1,
+      "precision": 1.0,
+      "recall": 0.25
+    },
+    "ZIP_CODE": {
+      "labeled": 10,
+      "found": 17,
+      "correct": 10,
+      "precision": 0.588,
+      "recall": 1.0
+    }
+  },
+  "documents": {
+    "app.log": {
+      "missed": [
+        "line 2: EMAIL \"m.rossi@example.it\"",
+        "line 5: JWT \"{{jwt}}\""
+      ],
+      "false_alarms": [
+        "line 2: EMAIL \"user=m.rossi@example.it\"",
+        "line 2: PHONE \"1757837702\"",
+        "line 9: ZIP_CODE \"88213\""
+      ]
+    },
+    "crm_export.csv": {
+      "missed": [
+        "line 5: DATE \"12 Aug 1995\""
+      ],
+      "false_alarms": [
+        "line 2: ZIP_CODE \"10001\"",
+        "line 2: PHONE \"4815162342\"",
+        "line 3: ZIP_CODE \"10002\"",
+        "line 3: PHONE \"4815162343\"",
+        "line 4: ZIP_CODE \"10003\"",
+        "line 4: PHONE \"4815162344\"",
+        "line 5: ZIP_CODE \"10004\"",
+        "line 5: PHONE \"4815162345\""
+      ]
+    },
+    "lookalikes.txt": {
+      "missed": [],
+      "false_alarms": [
+        "line 2: PHONE \"4815162342\"",
+        "line 2: ZIP_CODE \"12345\"",
+        "line 4: PHONE \"1757853000\""
+      ]
+    },
+    "patients.json": {
+      "missed": [
+        "line 13: NPI \"1245319599\"",
+        "line 25: NPI \"1679576722\""
+      ],
+      "false_alarms": [
+        "line 13: PHONE \"1245319599\"",
+        "line 25: PHONE \"1679576722\""
+      ]
+    },
+    "service.env": {
+      "missed": [
+        "line 7: CREDENTIAL_URI \"redis://default:pa55word@cache.internal.example.com:6379/0\"",
+        "line 8: CREDENTIAL_URI \"mysql://etl:s3cr3t@warehouse.example.com:3306/events\"",
+        "line 12: API_KEY \"{{aws_key_id}}\"",
+        "line 13: EMAIL \"support@example.com\""
+      ],
+      "false_alarms": [
+        "line 7: EMAIL \"pa55word@cache.internal.example.com\"",
+        "line 8: EMAIL \"s3cr3t@warehouse.example.com\"",
+        "line 13: EMAIL \"SUPPORT_EMAIL=support@example.com\""
+      ]
+    },
+    "support_ticket.txt": {
+      "missed": [
+        "line 4: DATE \"14 March 1985\"",
+        "line 5: US_ROUTING_NUMBER \"322271627\"",
+        "line 7: DATE \"9/8/2026\"",
+        "line 8: PHONE \"03-1234-5678\""
+      ],
+      "false_alarms": [
+        "line 1: ZIP_CODE \"48213\"",
+        "line 5: SSN \"322271627\""
+      ]
+    },
+    "users.sql": {
+      "missed": [
+        "line 4: EMAIL \"li.wei@example.com\"",
+        "line 5: EMAIL \"p.nair@example.in\"",
+        "line 6: EMAIL \"o.haddad@example.com\"",
+        "line 9: US_ROUTING_NUMBER \"021000021\"",
+        "line 11: US_ROUTING_NUMBER \"011000015\""
+      ],
+      "false_alarms": [
+        "line 4: EMAIL \"'li.wei@example.com\"",
+        "line 4: DATE \"2026-01-04\"",
+        "line 5: EMAIL \"'p.nair@example.in\"",
+        "line 5: DATE \"2026-02-11\"",
+        "line 6: EMAIL \"'o.haddad@example.com\"",
+        "line 6: DATE \"2026-03-28\""
+      ]
+    }
+  }
+}

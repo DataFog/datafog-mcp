@@ -1,0 +1,5 @@
+customer_id,name,email,phone,date_of_birth,zip,ssn,card_number,last_order_id,lifetime_value
+10001,Jane Doe,[[EMAIL|jane.doe@example.org]],[[PHONE|(415) 555-0123]],[[DATE|1987-03-14]],[[ZIP_CODE|94117]],[[SSN|536-22-1234]],[[CREDIT_CARD|4111 1111 1111 1111]],4815162342,1234.56
+10002,José Álvarez,[[EMAIL|jose.alvarez@example.com]],[[PHONE|+1 212 555 0147]],[[DATE|03/22/1990]],[[ZIP_CODE|10001-2345]],[[SSN|412-56-7890]],[[CREDIT_CARD|5500005555555559]],4815162343,88.10
+10003,Wei Zhang,[[EMAIL|wei.zhang@example.net]],[[PHONE|646.555.0199]],[[DATE|July 4, 1979]],[[ZIP_CODE|60614]],[[SSN|287-65-4321]],[[CREDIT_CARD|378282246310005]],4815162344,0.00
+10004,Amara Okafor,[[EMAIL|amara.okafor@example.org]],[[PHONE|7735550110]],[[DATE|12 Aug 1995]],[[ZIP_CODE|02139]],[[SSN|231456789]],[[CREDIT_CARD|6011111111111117]],4815162345,412.75
