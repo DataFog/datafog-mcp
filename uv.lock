@@ -657,15 +657,15 @@ wheels = [
 
 [[package]]
 name = "datafog-core"
-version = "0.4.3"
+version = "0.4.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/44/27/7f248c07cc6c2d8dfe35fdb2842090246c84cd54b42b6ecb1a795f93b794/datafog_core-0.4.3.tar.gz", hash = "sha256:e6ce24cf073a3b74008a3426190ef21d624d88c97200492812e79f1eb1711555", size = 114994, upload-time = "2026-10-08T16:00:33.534Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/16/a7/2a72d66c83fc973f285d7be35556d40859fd0e51a993196fc17c6c306b7c/datafog_core-0.4.4.tar.gz", hash = "sha256:bb752291f41b6674d78ea446a17ab4a2edeaaf1ed2046c8abf83073aa6f875f9", size = 118010, upload-time = "2026-10-12T17:31:09.469Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/18/c1/c51e75f1fddaca1066767139f8402135569dbeabd3fc71f96e703e70819d/datafog_core-0.4.3-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:7dc4a0fabb537fbefd1221ea710706fb84debcd3d7ec6ab9514ed5afc0bce89a", size = 1656001, upload-time = "2026-10-08T16:00:26.073Z" },
-    { url = "https://files.pythonhosted.org/packages/b6/c6/07fab90347a6a6e68fa75aad9bb0ca6ea48c3fe3d8ec14332cf303443ac4/datafog_core-0.4.3-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:bce7fd75979b637636e2fb13266745af54edf6dc9c1b50b69c9ff77a7fdc8c62", size = 1587069, upload-time = "2026-10-08T16:00:27.66Z" },
-    { url = "https://files.pythonhosted.org/packages/16/00/02cfeafce53a511bdfa29af408acc8a486d8e26573503a0b074edc8e2d59/datafog_core-0.4.3-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:709581b8fcd8c27c2edc61c831f3eaa9c94ef392e51177f1154fdd47bc5cb345", size = 1759106, upload-time = "2026-10-08T16:00:29.342Z" },
-    { url = "https://files.pythonhosted.org/packages/0a/b0/2a34d68e460cfb9edbb1cee98bc1b54f3b255d1049822cdd480dfd74a448/datafog_core-0.4.3-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:8491b338721e3005934f0351d495aa6773ad5b0768a339331a6d550c5ca7ec89", size = 1834402, upload-time = "2026-10-08T16:00:30.744Z" },
-    { url = "https://files.pythonhosted.org/packages/75/5d/1433d95d33ac26b41fc048318dd9b1974330041477520d3a33384ce3d238/datafog_core-0.4.3-cp310-abi3-win_amd64.whl", hash = "sha256:fd03d33b5ea663fc9fd994f0ea8095a77ed4b1826fe8ef9e3b5254a3036e30e4", size = 1442245, upload-time = "2026-10-08T16:00:32.295Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/fd/4e50eb434195fbb7e8cbae0b5a708e6bedad049b4a1655c4435901a25f1b/datafog_core-0.4.4-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:b1364e9a1373663e3072ce191056bc200d00826bf2ec8833d297ef905f5bdcf5", size = 1657239, upload-time = "2026-10-12T17:30:59.952Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/92/713b715fd85300efa165da8917e39c464e76d0968156ef6a143f0bb071fa/datafog_core-0.4.4-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:2c018ff48a669c4ef18ce63434d59d6e0b147cca867a04dd1b5161f18c735a1d", size = 1588295, upload-time = "2026-10-12T17:31:02.056Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/69/bae204ed85498e72335f36df3ad9b181311394cf0639ff71679dbd5bba31/datafog_core-0.4.4-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:f9aa6ffccf0761c5ccf8b07835859d28a163c58a47b9da904f4cf7aea7755e49", size = 1759047, upload-time = "2026-10-12T17:31:04.011Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/83/ea5c303e132a638e2db4b1c6c503a44e73c52abbec02b53a1b0f1f4d6bf9/datafog_core-0.4.4-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:753ff114023cf3bad90f044c0f247ea5206f54cd9e576205bc74966a383ee792", size = 1833620, upload-time = "2026-10-12T17:31:05.699Z" },
+    { url = "https://files.pythonhosted.org/packages/49/29/e6f18b2d85d54b208ff610353337d920143126a04b98a83f244ca2c781f1/datafog_core-0.4.4-cp310-abi3-win_amd64.whl", hash = "sha256:099a31af9a86d5925c5603bc7a535adf18bb0202fee3ce60bb69153ee6af3d3c", size = 1444499, upload-time = "2026-10-12T17:31:07.918Z" },
 ]
 
 [[package]]
@@ -703,7 +703,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "datafog-core", specifier = ">=0.4.3,<0.5" },
+    { name = "datafog-core", specifier = ">=0.4.4,<0.5" },
     { name = "fastmcp", specifier = ">=3,<4" },
     { name = "mcp", specifier = ">=1.2.0" },
     { name = "pydantic", specifier = ">=2,<3" },

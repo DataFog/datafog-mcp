@@ -64,8 +64,8 @@ def test_exact_allowlist_applies_to_scans_and_all_writes(
 
 def test_allowlists_are_entity_specific(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source = tmp_path / "input.txt"
-    source.write_text("NPI: 1234567893", encoding="utf-8")
-    configure(tmp_path, monkeypatch, '[allow.exact]\nNPI = ["1234567893"]')
+    source.write_text("NPI: 2125550100", encoding="utf-8")
+    configure(tmp_path, monkeypatch, '[allow.exact]\nNPI = ["2125550100"]')
     result = call("datafog_scan", source, entity_types=["NPI", "PHONE"])
     assert result["counts"] == {"PHONE": 1}
 

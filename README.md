@@ -230,7 +230,7 @@ See [CONTRIBUTING.md](https://github.com/DataFog/datafog-mcp/blob/main/CONTRIBUT
 
 To install from a checkout instead of PyPI, run `uv tool install .` from the repository root.
 
-MCP passes its default or explicit `entity_types` to Core before scanning, including decoded CSV/TSV cells. Only selected detectors run. This requires datafog-core 0.4.3 or later.
+MCP passes its default or explicit `entity_types` to Core before scanning, including decoded CSV/TSV cells. Only selected detectors run. This installation requires datafog-core 0.4.4 or later.
 
 ```bash
 uv sync --group dev

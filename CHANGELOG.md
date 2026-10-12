@@ -20,6 +20,10 @@ First release: an MCP server that checks a file for personal data and credential
 - Owners can choose one copy destination in `policy.toml` using `datafog-mcp policy --edit`. Tool-selected filenames stay within that directory, subject to allowed roots and directory denials; absent policy keeps sibling copies. Invalid copy policy or insufficient destination disk space refuses writes. Output filenames beginning with `.` are refused; hidden inputs remain readable and receive visible default copy names.
 - The same policy supports exact per-entity allowlists, routine scanning folders/extensions constrained by allowed roots, and advisory ask/transform/stop guidance. `datafog_policy` exposes settings without exact allowlist values; each scan/write validates a fresh immutable snapshot, and invalid policy refuses access. Missing scope folders are reported as inactive with warnings, without blocking explicit scans/writes or widening routine scope.
 
+### Changed
+
+- Require datafog-core 0.4.4 or later, reducing phone matches on Unix timestamps and credit-card matches inside decimal numbers.
+
 ### Security
 
 - No tool response or server log carries file contents or matched values, including when a tool fails.
