@@ -1,0 +1,4 @@
+customer_id,name,email,phone,ssn,credit_card,signup_date,zip_code,notes
+C001,Avery Bennett,avery@example.com,212-555-0100,123-45-6789,4111-1111-1111-1111,2026-10-12,94105,"Requested invoice, monthly billing"
+C002,Morgan Chen,morgan@example.com,415-555-0182,321-54-6789,,2026-09-01,10001,"Premium plan
+Follow up next week"
