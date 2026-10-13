@@ -21,7 +21,7 @@
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
-DataFog MCP lets an AI agent detect personal data and credentials in local files, then create a copy with matched values redacted, masked, or removed. Detection runs on [DataFog Core](https://github.com/DataFog/datafog-core). Tool responses contain counts, locations, and copy paths—never file contents or matched values.
+DataFog MCP lets an AI agent detect personal data and credentials in local files, then create a copy with matched values redacted, masked, removed, or consistently pseudonymized. Detection runs on [DataFog Core](https://github.com/DataFog/datafog-core). Tool responses contain counts, locations, and copy paths—never file contents or matched values.
 
 **Stable v1.0.0.** Tested with Claude Code. CI runs on Linux; development uses macOS. Windows and other MCP clients have not been validated.
 
@@ -73,7 +73,7 @@ Replace emails and phone numbers with typed labels in a new copy. The original s
 
 These demos select email and phone checks; phone detection is opt-in. An explicit selection **replaces** the defaults. Other columns remain unchanged.
 
-## Five tools, one local workflow
+## Six tools, one local workflow
 
 | Tool | Use it to |
 |---|---|
@@ -82,8 +82,13 @@ These demos select email and phone checks; phone detection is opt-in. An explici
 | `datafog_redact` | Replace matched values with labels such as `[EMAIL]`. |
 | `datafog_mask` | Replace each matched value character for character. |
 | `datafog_remove` | Delete matched values without leaving a marker. |
+| `datafog_pseudonymize` | Replace matched values consistently to preserve customer grouping and cross-file linkage. |
 
 Scans return individual locations for up to **700 findings**. Above that, counts remain complete, but individual findings are omitted. Copies are saved beside the original by default, or in an owner-configured directory.
+
+### Preserve customer linkage
+
+Use `datafog_pseudonymize(path, scope)` when repeated customers need to remain distinguishable. Configure a scope and create its local key before using the tool. Keys can use OS credential storage or private files on headless POSIX systems. [Pseudonymization setup →](docs/pseudonymization.md)
 
 ### Detection coverage
 
@@ -109,6 +114,7 @@ Responses do include paths and metadata, which enter the agent's context and may
 
 ## Documentation and contributing
 
+- [Pseudonymization and local key setup](docs/pseudonymization.md)
 - [Detection and copy behavior](docs/detection.md)
 - [Supported formats and limits](docs/file-formats.md)
 - [Allowed roots and owner policy](docs/policy.md)
