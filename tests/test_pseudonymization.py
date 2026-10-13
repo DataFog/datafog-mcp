@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -347,6 +348,55 @@ def test_table_pseudonyms_preserve_linkage_allowlists_and_structure(
     ).structured_content
     assert plain_result is not None
     assert Path(plain_result["output_path"]).read_text() == rows[1][0]
+
+
+def test_customer_purchase_grouping_survives_pseudonymization(
+    configured: tuple[Path, Path],
+) -> None:
+    source, _ = configured
+    source = source.with_name("customer_purchases.csv")
+    original = (
+        "email,plan,purchase_amount\n"
+        "avery@example.com,Premium,100.00\n"
+        "morgan@example.com,Standard,50.00\n"
+        "avery@example.com,Premium,75.00\n"
+        "morgan@example.com,Standard,25.00\n"
+        "jordan@example.com,Premium,40.00\n"
+    )
+    source.write_text(original)
+
+    result = call(path=str(source), scope="customers", entity_types=["EMAIL"])
+    data = result.structured_content
+    assert data is not None
+    output = Path(data["output_path"]).read_text()
+    before = list(csv.DictReader(original.splitlines()))
+    after = list(csv.DictReader(output.splitlines()))
+    assert len(after) == len(before) == 5
+
+    customer_pseudonyms: dict[str, str] = {}
+    purchases_by_customer: dict[str, tuple[int, Decimal]] = {}
+    for input_row, output_row in zip(before, after, strict=True):
+        email = input_row["email"]
+        pseudonym = output_row["email"]
+        assert pseudonym
+        assert customer_pseudonyms.setdefault(email, pseudonym) == pseudonym
+        assert output_row["plan"] == input_row["plan"]
+        assert output_row["purchase_amount"] == input_row["purchase_amount"]
+        count, total = purchases_by_customer.get(pseudonym, (0, Decimal("0")))
+        purchases_by_customer[pseudonym] = (
+            count + 1,
+            total + Decimal(output_row["purchase_amount"]),
+        )
+
+    # Distinct customers must not collapse into a shared placeholder or pseudonym.
+    assert len(set(customer_pseudonyms.values())) == 3
+    assert purchases_by_customer == {
+        customer_pseudonyms["avery@example.com"]: (2, Decimal("175.00")),
+        customer_pseudonyms["morgan@example.com"]: (2, Decimal("75.00")),
+        customer_pseudonyms["jordan@example.com"]: (1, Decimal("40.00")),
+    }
+    assert all(email not in output for email in customer_pseudonyms)
+    assert source.read_text() == original
 
 
 def test_pseudonymization_warns_on_missing_scope_without_widening_it(
