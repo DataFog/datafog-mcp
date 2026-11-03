@@ -2,6 +2,12 @@
 
 Notable changes to datafog-mcp. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+
+- Locked runtime dependencies updated past published advisories: authlib 1.9.3, certifi 2026.10.23, dnspython 2.9.1 (Python 3.11+), fastmcp 3.4.11, joserfc 1.7.7 (Python 3.10) and 1.8.0, and opentelemetry-api 1.45.2.
+
 ## [1.0.0] - 2026-10-12
 
 First release: an MCP server that checks a file for personal data and credentials, and writes a cleaned copy, without file contents or matched values ever appearing in a tool response.
