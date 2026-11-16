@@ -4,6 +4,20 @@ Notable changes to datafog-mcp. The format follows [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+### Added
+
+- `ACCOUNT_NUMBER` and `STREET_ADDRESS` can be selected through `entity_types` in all four file tools, and used as `[allow.exact]` keys in `policy.toml`. Both match only after a label, such as `Account number:` or `Street address:`, and both are off by default.
+
+### Changed
+
+- Require datafog-core 1.1.0 or later, below 1.4. The default entity types are unchanged: the server keeps its own list and does not follow Core's wider default scan, so `DATE`, `ZIP_CODE`, `PHONE`, `IP_ADDRESS`, `ACCOUNT_NUMBER`, and `STREET_ADDRESS` remain opt-in. Core 1.4 and later are excluded for now because they report less of an email address that follows `=` or a quote in plain text.
+- The same file can produce different findings than under datafog-core 0.4.4:
+  - A credit card number followed by a space or hyphen and more digits is now found; it was missed before. A card match no longer extends into digits that follow it, and digits spanning a phone number and a date are no longer reported as a card.
+  - An email address whose local part begins with a ZIP- or SSN-shaped number and a separator, such as `12345.name@example.com`, is reported from after the separator. The leading digits and separator stay in copies unless another selected type matches them.
+  - A PostgreSQL connection string no longer absorbs the start of a card number that follows a hyphen.
+  - With opt-in types selected: a ZIP code directly before a hyphen and a date is now found, and an IPv6 address directly after a date and a hyphen is reported without its first group.
+- Scans and writes now refuse a file in which two detections of different types partly overlap, naming the entity types and suggesting a narrower `entity_types` selection. Previously one detection was kept and the rest of the other value stayed in the copy; for example, a card number immediately followed by a quote and an email address kept most of its digits. One detection wholly inside another is still resolved as before.
+
 ### Security
 
 - Locked runtime dependencies updated past published advisories: authlib 1.9.3, certifi 2026.10.23, dnspython 2.9.1 (Python 3.11+), fastmcp 3.4.11, joserfc 1.7.7 (Python 3.10) and 1.8.0, and opentelemetry-api 1.45.2.

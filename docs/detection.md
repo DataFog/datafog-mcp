@@ -14,17 +14,20 @@ Detected by default:
 - **Financial and health identifiers** — `US_ROUTING_NUMBER`, `NPI`
 - **Credentials** — `API_KEY`, `BEARER_TOKEN`, `JWT`, `CREDENTIAL_URI`, `PRIVATE_KEY`
 
-`DATE`, `ZIP_CODE`, `PHONE`, and `IP_ADDRESS` are available but off by default. Dates, ZIP codes, and phone numbers can match operational timestamps or numeric IDs, so enable them when that coverage is needed. A default scan does not check these types, and a default write leaves their values unchanged unless another selected detector also matches them.
+`DATE`, `ZIP_CODE`, `PHONE`, `IP_ADDRESS`, `ACCOUNT_NUMBER`, and `STREET_ADDRESS` are available but off by default. Dates, ZIP codes, and phone numbers can match operational timestamps or numeric IDs, so enable them when that coverage is needed. A default scan does not check these types, and a default write leaves their values unchanged unless another selected detector also matches them.
 
 Pass `entity_types` to choose the types to check or transform, or omit it for the defaults. An explicit list **replaces** the defaults; it does not add to them. For example, `{"path": "/absolute/path/export.csv", "entity_types": ["EMAIL", "PHONE", "DATE", "ZIP_CODE"]}` checks only those four types. Include every default type you still want when opting into another type. Unsupported types and an empty list are refused.
 
 Some types are narrower than their names suggest:
 
 - **`US_ROUTING_NUMBER` and `NPI`** are found only after a label, such as `Routing number:` or `NPI:`. Table headers supply this label context; bare values in plain text can be missed or reported as another type.
+- **`ACCOUNT_NUMBER` and `STREET_ADDRESS`** are found only after a label, such as `Account number:` or `Street address:`. Unlabeled account numbers and street addresses are not detected.
 - **`API_KEY`** covers GitHub tokens and Stripe secret and restricted keys. Keys from other providers, such as AWS, are not detected.
 - **`BEARER_TOKEN`** is the token in an `Authorization: Bearer` header.
 - **`CREDENTIAL_URI`** covers PostgreSQL connection strings that include a password (`postgres://` or `postgresql://`). Other schemes, such as MySQL, Redis, or MongoDB, are not detected.
 - **`PRIVATE_KEY`** is a complete PEM private-key block. Public keys and certificates are not reported.
+
+When two detections of different types partly overlap and neither contains the other, replacing either one would leave part of the other value in the copy. Scans and writes refuse such a file with an error naming the entity types involved; nothing is written. Run the tool again with a narrower `entity_types` selection. One detection wholly inside another, such as the address-shaped part of a connection string, is resolved normally.
 
 Credential detection is not a substitute for a dedicated secret scanner. A clean result means none of the selected detectors matched; it is not proof a file holds no sensitive data or secrets.
 

@@ -88,8 +88,8 @@ Scans return individual locations for up to **700 findings**. Above that, counts
 ### Detection coverage
 
 - **On by default:** email, SSN, credit card, labeled US routing numbers and NPIs, and supported credentials.
-- **Opt in:** phone, date, ZIP code, and IP address.
-- **Not detected:** plain-text names and street addresses.
+- **Opt in:** phone, date, ZIP code, IP address, and labeled account numbers and street addresses.
+- **Not detected:** plain-text names and unlabeled street addresses.
 
 Credential coverage includes GitHub and Stripe keys, bearer tokens, JWTs, password-bearing PostgreSQL URIs, and PEM private keys. Coverage varies by type; this is not a replacement for a dedicated secret scanner. [Detection and copy behavior →](docs/detection.md)
 

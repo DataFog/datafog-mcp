@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import fastmcp
-from datafog_core import scan, transform
+from datafog_core import DataFogFindingError, scan, transform
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
@@ -30,7 +30,7 @@ from datafog_mcp.reader import (
 )
 
 if TYPE_CHECKING:
-    from datafog_core import _ScanConfig
+    from datafog_core import Finding, _ScanConfig
 
     EntityType = str
 else:
@@ -52,9 +52,10 @@ mcp = FastMCP(
         "files on disk for emails, SSNs, credit card numbers, labeled "
         "bank routing numbers and NPIs, GitHub and Stripe API keys, "
         "bearer tokens, JWTs, PostgreSQL connection strings with a password, "
-        "and PEM private keys. Dates, ZIP codes, phone numbers, and IP "
-        "addresses require an explicit entity_types selection. Plain-text "
-        "names and street addresses are not detected. It can write a transformed "
+        "and PEM private keys. Dates, ZIP codes, phone numbers, IP "
+        "addresses, labeled account numbers, and labeled street addresses "
+        "require an explicit entity_types selection. Plain-text names and "
+        "unlabeled street addresses are not detected. It can write a transformed "
         "copy. File contents are processed on this machine and never "
         "included in tool responses. Use datafog_policy to discover owner "
         "settings and whether a path should be scanned before reading. "
@@ -116,6 +117,42 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
         return ScanConfig()
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
+
+
+class OverlapConflict(ValueError):
+    """Detections partly overlap; the message names entity types, never values."""
+
+
+def _overlap_conflict(found: list[Finding], index: int | None) -> OverlapConflict:
+    """
+    Describe a refused overlap without quoting the file.
+
+    Core 1.x refuses to transform when two detections partly overlap and
+    neither contains the other: replacing either one alone would leave the
+    rest of the other in the copy. The server fails the request the same way
+    rather than choose, and names only the entity types involved so the
+    caller can narrow entity_types.
+
+    Parameters:
+      found: The findings passed to the engine.
+      index: The engine's index of a finding it could not cover, if given.
+    Returns:
+      An error whose message is safe to show.
+    """
+    kinds: set[str] = set()
+    if index is not None and 0 <= index < len(found):
+        target = found[index].codepoint_range
+        kinds = {
+            item.entity_type
+            for item in found
+            if item.codepoint_range.start < target.end and target.start < item.codepoint_range.end
+        }
+    named = f" ({', '.join(sorted(kinds))})" if kinds else ""
+    return OverlapConflict(
+        f"Detections of different types partly overlap{named}, so replacing one would "
+        "leave part of another in place. No result was produced and no copy was written. "
+        "Retry with a narrower entity_types selection."
+    )
 
 
 def _request_policy() -> OutputPolicy:
@@ -234,7 +271,7 @@ async def datafog_scan(
     or Redis, are not detected. It is not a substitute for a dedicated secret
     scanner. A clean result means none of the selected detectors matched,
     not that the file holds no sensitive data or secrets. Plain-text names
-    and street addresses are not detected.
+    and unlabeled street addresses are not detected.
 
     Routing numbers and NPIs are found only after a label such as "Routing
     number:" or "NPI:". CSV/TSV headers supply this label context. Bare
@@ -251,8 +288,10 @@ async def datafog_scan(
       offsets of each detected entity.
       entity_types: The types to look for. Defaults to API_KEY, BEARER_TOKEN,
       CREDENTIAL_URI, CREDIT_CARD, EMAIL, JWT, NPI, PRIVATE_KEY, SSN, and
-      US_ROUTING_NUMBER. DATE, ZIP_CODE, PHONE, and IP_ADDRESS are available
-      on request. An explicit list replaces the defaults; an empty list is refused.
+      US_ROUTING_NUMBER. DATE, ZIP_CODE, PHONE, IP_ADDRESS, ACCOUNT_NUMBER,
+      and STREET_ADDRESS are available on request; the last two match only
+      after a label such as "Account number:" or "Street address:". An
+      explicit list replaces the defaults; an empty list is refused.
       input_format: auto parses .csv/.tsv as tables, uses env email boundaries
       for .env/.env.*/*.env and sql boundaries for *.sql (case-insensitive),
       and text otherwise. csv, tsv, env, sql, and text override the filename.
@@ -310,7 +349,7 @@ async def _scan_file(
             has_header,
             current,
         )
-    except CsvError as exc:
+    except (CsvError, OverlapConflict) as exc:
         raise ToolError(str(exc)) from None
 
     response = render(
@@ -385,7 +424,7 @@ async def _transform_to_file(
             has_header,
             copy_policy,
         )
-    except CsvError as exc:
+    except (CsvError, OverlapConflict) as exc:
         raise ToolError(str(exc)) from None
 
     try:
@@ -579,7 +618,14 @@ def _process_file(
             )
         ]
         # Core resolves overlapping detectors identically for scans and writes.
-        return transform(text, found, transform_config(strategy))
+        try:
+            return transform(text, found, transform_config(strategy))
+        except DataFogFindingError as exc:
+            # Any other finding error is unexpected and may quote the file,
+            # so it is left for _contained to replace.
+            if getattr(exc, "code", None) != "review_conflict":
+                raise
+            raise _overlap_conflict(found, getattr(exc, "finding_index", None)) from None
 
     if selected in ("csv", "tsv"):
         return process_csv(

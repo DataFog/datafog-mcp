@@ -6,7 +6,7 @@
 
 The guarantee holds when a tool fails, too. An unexpected error returns only its type, such as `datafog failed with RuntimeError`, and its details are kept out of both the response and the server's log.
 
-These checks are advisory and reduce exposure; they do not de-identify data or enforce an agent's file access. They complement enterprise data-loss-prevention (DLP) and endpoint controls rather than replace them. Plain-text names and street addresses are not detected by this installation.
+These checks are advisory and reduce exposure; they do not de-identify data or enforce an agent's file access. They complement enterprise data-loss-prevention (DLP) and endpoint controls rather than replace them. Plain-text names and unlabeled street addresses are not detected by this installation.
 
 What responses do carry:
 

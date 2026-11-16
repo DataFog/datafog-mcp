@@ -6,7 +6,7 @@ Bare `datafog-mcp` runs the server over stdio; `datafog-mcp serve` is equivalent
 
 To install from a checkout instead of PyPI, run `uv tool install .` from the repository root.
 
-MCP passes its default or explicit `entity_types` to Core before scanning, including decoded CSV/TSV cells. Only selected detectors run. This installation requires datafog-core 0.4.4 or later.
+MCP passes its default or explicit `entity_types` to Core before scanning, including decoded CSV/TSV cells. Only selected detectors run. This installation requires datafog-core 1.1.0 or later, below 1.4.
 
 ```bash
 uv sync --group dev
