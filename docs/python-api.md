@@ -8,7 +8,7 @@ from datafog_mcp import api
 
 > **Provisional.** This interface is new in this release. Names and signatures may change in the next minor version; pin the package version if you depend on it.
 
-Importing it does not import `fastmcp` or `mcp` and starts nothing. Measured with `python -X importtime` on a Linux arm64 test machine with Python 3.12, the import takes roughly 15 to 20 ms, against roughly 300 to 450 ms for `datafog_mcp.server`. Only the names listed here belong to the interface; other modules in the package can change without notice.
+Importing it does not import `fastmcp` or `mcp` and starts nothing. Measured with `python -X importtime`, the import is roughly 20 times faster than importing `datafog_mcp.server`. Absolute timings are machine-dependent, so measure on your own hardware if a hook has a time budget. The package ships a `py.typed` marker, so type checkers use its annotations. Only the names listed here belong to the interface; other modules in the package can change without notice.
 
 ## Example
 
@@ -31,7 +31,7 @@ Report failures by exception type unless the exception is one of those listed un
 
 | Name | Signature | Purpose |
 | --- | --- | --- |
-| `load_policy` | `() -> Policy` | Read and validate `policy.toml`. An absent file gives the defaults; an unusable one raises `PolicyFileError`. |
+| `load_policy` | `() -> Policy` | Read and validate `policy.toml`. An absent file gives the defaults; an unusable one raises `PolicyFileError`, including one whose copy directory or scope folder is the vault or inside it. |
 | `Policy.is_allowlisted` | `(entity_type: str, value: str) -> bool` | Whether the owner approved exactly this value for this type. |
 | `Policy.allowlist_counts` | `dict[str, int]` | Approved values per entity type, as counts. |
 | `Policy.in_scope` | `(path: Path) -> bool` | Whether a resolved path is in the routine scanning scope. Check roots first. |
@@ -77,7 +77,7 @@ The result has two parts:
 - `transformations`: one item per detection, with `entity_type` and `source_codepoint_range` (`start`, `end`) in the original text. Table results are `CsvFinding` objects that add one-based `record` and `column`.
 - `text`: the input with each detection replaced according to `strategy`.
 
-It raises `CsvError` for a malformed table and `OverlapConflict` when detections of different types partly overlap.
+It raises `CsvError` for a malformed table and `OverlapConflict` when detections of different types partly overlap. An `input_format` or `strategy` that is not one of the allowed values raises `ValueError`; the message lists the allowed values (`input_format must be one of: auto, text, csv, tsv, env, sql` or `strategy must be one of: mask, redact, remove`) and does not repeat the argument. Values are case-sensitive.
 
 ## Vault location
 
@@ -92,8 +92,8 @@ See [application vault location](policy.md#application-vault-location) for the r
 ## What is and is not returned
 
 - **Matched values are not returned.** Results carry entity types, counts, and positions. `text` is the transformed input, so it still holds everything that was not detected; discard it if you only need to know what was found. Table header text is not returned.
-- **Approved allowlist values are not returned.** `is_allowlisted` answers yes or no for a value you already hold, and `allowlist_counts` gives counts. The values do not appear in `repr()` or `str()` of the policy or of its allowlist mapping, or in any error message. The policy object holds them in memory in order to match, so do not serialize its attributes yourself.
-- **These errors are written to be shown:** `PolicyFileError`, `CsvError`, `OverlapConflict`, and `VaultConfigError`. Their messages hold no file content, no allowlist value, and no vault location.
+- **Approved allowlist values never appear in results, reprs, or errors, but the policy holds them.** `is_allowlisted` answers yes or no for a value you already hold, and `allowlist_counts` gives counts. The values do not appear in scan results, in `repr()` or `str()` of the policy or of its allowlist mapping, or in any error message. `Policy.allow_exact` does hold them in memory in order to match, and reading that attribute gives you the values. Do not serialize, log, or return `allow_exact` or its contents, for example through `dataclasses.asdict`, `vars`, JSON, or pickle.
+- **These errors are written to be shown:** `PolicyFileError`, `CsvError`, `OverlapConflict`, and `VaultConfigError`, and the `ValueError` that `process_text` raises for an unknown `input_format` or `strategy`. Their messages hold no file content, no allowlist value, no policy path, and no vault location.
 - **Path errors name paths.** `PathNotAllowed`, `RootPolicyError`, and `ReadError` messages include the path involved and the allowed roots, as the server's tool errors do. A filename can identify a person on its own. A path refused for being inside the vault is the exception: that message names no path.
 - **`vault_dir` returns the location** to your program. The MCP server reports only whether one is configured.
 - **Any other exception may quote the text.** An unexpected engine failure can carry input in its message. Report its type, as the server does, not its message.

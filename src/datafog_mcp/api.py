@@ -17,13 +17,17 @@ What this interface returns, and what it does not:
 
 - Scan results carry entity types, counts, and positions, plus the transformed
   text. They never carry a matched value or a table's header text.
-- Approved allowlist values are never returned. Policy.is_allowlisted
-  answers yes or no for a value the caller already holds, and
-  Policy.allowlist_counts gives a count per entity type. The values are
-  absent from the policy's repr() and str() and from every error message.
+- Approved allowlist values never appear in results, reprs, or errors.
+  Policy.is_allowlisted answers yes or no for a value the caller already
+  holds, and Policy.allowlist_counts gives a count per entity type. The
+  values are absent from the policy's repr() and str() and from every error
+  message. Policy.allow_exact does hold them in memory in order to match:
+  never serialize or log that attribute.
 - Policy, table, overlap, and vault errors (PolicyFileError, CsvError,
   OverlapConflict, VaultConfigError) have messages written to be shown: they
-  hold no file content, no allowlist value, and no vault location.
+  hold no file content, no allowlist value, no policy path, and no vault
+  location. So does the ValueError process_text raises for an unknown
+  input_format or strategy, which lists the allowed values only.
 - Path and read errors (PathNotAllowed, RootPolicyError, ReadError) name the
   path involved and the allowed roots, as the server's tool errors do. A
   filename can identify a person on its own. The exception is a path inside

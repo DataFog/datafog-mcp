@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, get_args
 
 from datafog_core import DataFogFindingError, scan, transform
 
@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from datafog_core import Finding, TransformResult, _ScanConfig, _TransformationConfig
 
 InputFormat = Literal["auto", "text", "csv", "tsv", "env", "sql"]
+_INPUT_FORMATS: tuple[str, ...] = get_args(InputFormat)
+_STRATEGIES: tuple[str, ...] = get_args(Strategy)
 
 # The engine calls, as parameters: the server passes its own module-level
 # names so its tests can replace them and see every failure path.
@@ -196,7 +198,16 @@ def process_text(
     Raises:
       CsvError: The table is malformed; the message has locations only.
       OverlapConflict: Detections partly overlap; the message has types only.
+      ValueError: input_format or strategy is not one of the allowed values;
+      the message lists the allowed values and not the one given.
     """
+    # Checked here because nothing else does: an unknown format would be
+    # scanned as plain text, and an unknown strategy would fail as a KeyError.
+    # The messages list the allowed values and never repeat the argument.
+    if input_format not in _INPUT_FORMATS:
+        raise ValueError(f"input_format must be one of: {', '.join(_INPUT_FORMATS)}")
+    if strategy not in _STRATEGIES:
+        raise ValueError(f"strategy must be one of: {', '.join(_STRATEGIES)}")
     return process_with_engine(
         text,
         Path(source),

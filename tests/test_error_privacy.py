@@ -21,7 +21,7 @@ from fastmcp import Client
 from fastmcp.client.client import CallToolResult
 from fastmcp.exceptions import ToolError
 
-from datafog_mcp import server
+from datafog_mcp import policy, server
 from datafog_mcp.server import mcp
 from datafog_mcp.vault import VAULT_DIR_VAR
 
@@ -241,6 +241,102 @@ def test_vault_refusal_carries_no_vault_detail(
     assert SENTINEL not in captured.out
     assert SENTINEL not in captured.err
     assert SENTINEL not in caplog.text
+
+
+@pytest.mark.parametrize("tool", ["datafog_policy", *ALL_TOOLS])
+@pytest.mark.parametrize("setting", ["output", "scope"])
+@pytest.mark.parametrize("route", ["direct", "symlink"])
+def test_policy_naming_the_vault_carries_no_vault_detail(
+    tool: str,
+    setting: str,
+    route: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    A policy whose copy directory or scope folder is the vault reveals nothing.
+
+    datafog_policy would otherwise return the directory, and a write would be
+    refused as inside the vault, which together locate it. The sentinel is in
+    the vault's name and in the link that leads to it, so the policy value and
+    the resolved location are both caught in the response, stderr, and the log.
+
+    Parameters:
+      tool: The tool under test.
+      setting: Whether the copy directory or a scope folder names the vault.
+      route: Whether the policy names the vault itself or a link to it.
+      tmp_path: Holds the vault, the link, and the policy.
+      monkeypatch: Configures the vault and the policy location.
+      capfd: Captures stdout and stderr.
+      caplog: Captures log records.
+    """
+    vault = tmp_path / f"vault-{SENTINEL}"
+    vault.mkdir()
+    link = tmp_path / f"link-{SENTINEL}"
+    link.symlink_to(vault, target_is_directory=True)
+    named = (vault if route == "direct" else link).as_posix()
+    body = (
+        f'[output]\ndirectory = "{named}"\n'
+        if setting == "output"
+        else f'[scope]\nfolders = ["{named}"]\n'
+    )
+    location = tmp_path / "policy.toml"
+    location.write_text("version = 1\n" + body, encoding="utf-8")
+    monkeypatch.setattr(policy, "POLICY_FILE", location)
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+    source = tmp_path / "contacts.txt"
+    source.write_text("contact jack.smith@example.com\n", encoding="utf-8")
+    arguments = {} if tool == "datafog_policy" else {"path": str(source)}
+
+    with pytest.raises(ToolError, match="is inside the application vault directory") as excinfo:
+        _call(tool, **arguments)
+
+    captured = capfd.readouterr()
+    assert SENTINEL not in str(excinfo.value)
+    assert SENTINEL not in captured.out
+    assert SENTINEL not in captured.err
+    assert SENTINEL not in caplog.text
+    assert list(vault.iterdir()) == []
+
+
+@pytest.mark.parametrize("command", [[], ["policy"]])
+def test_startup_refusal_for_a_vault_covering_a_root_names_no_location(
+    command: list[str], tmp_path: Path
+) -> None:
+    """
+    A vault that is the allowed root stops the real entry point, privately.
+
+    Runs in a child process with the default root, the home directory, and
+    the vault set to that same directory. The sentinel is in its name.
+
+    Parameters:
+      command: The server itself, or the owner's policy command.
+      tmp_path: Holds the home directory.
+    """
+    home = tmp_path / f"home-{SENTINEL}"
+    home.mkdir()
+    environment = {**os.environ, VAULT_DIR_VAR: "~", "HOME": str(home)}
+    environment.pop("DATAFOG_MCP_ALLOWED_ROOTS", None)
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "datafog_mcp", *command],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=60,
+        check=False,
+    )
+
+    assert completed.returncode != 0
+    assert completed.stdout == ""
+    assert completed.stderr.strip() == (
+        f"datafog-mcp: ${VAULT_DIR_VAR} is an allowed root or contains one, "
+        "so every path would be refused"
+    )
+    assert SENTINEL not in completed.stderr
 
 
 @pytest.mark.parametrize("value", [f"relative/{SENTINEL}", f"/tmp/.ssh/{SENTINEL}", ""])

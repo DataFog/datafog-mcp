@@ -313,6 +313,49 @@ def test_process_text_reports_overlaps_and_bad_tables_without_content() -> None:
     assert PRIVATE not in str(malformed.value)
 
 
+@pytest.mark.parametrize("given", ["nope", "CSV", "", "private-person@example.com", None])
+def test_process_text_refuses_an_unknown_input_format(given: Any) -> None:
+    """An unknown format is an error, not a silent plain-text scan."""
+    with pytest.raises(ValueError) as refused:
+        api.process_text(PRIVATE, policy=api.Policy(), input_format=given)
+
+    assert str(refused.value) == "input_format must be one of: auto, text, csv, tsv, env, sql"
+    assert PRIVATE not in str(refused.value)
+
+
+@pytest.mark.parametrize("given", ["shred", "REDACT", "", "private-person@example.com", None])
+def test_process_text_refuses_an_unknown_strategy(given: Any) -> None:
+    """An unknown strategy is a ValueError listing the choices, not a KeyError."""
+    with pytest.raises(ValueError) as refused:
+        api.process_text(PRIVATE, policy=api.Policy(), strategy=given)
+
+    assert not isinstance(refused.value, KeyError)
+    assert str(refused.value) == "strategy must be one of: mask, redact, remove"
+    assert PRIVATE not in str(refused.value)
+
+
+@pytest.mark.parametrize("input_format", ["auto", "text", "csv", "tsv", "env", "sql"])
+@pytest.mark.parametrize("strategy", ["mask", "redact", "remove"])
+def test_process_text_accepts_every_documented_format_and_strategy(
+    input_format: api.InputFormat, strategy: api.Strategy
+) -> None:
+    """Validation refuses nothing the signature allows."""
+    result = api.process_text(
+        f"email\n{PRIVATE}\n", policy=api.Policy(), input_format=input_format, strategy=strategy
+    )
+
+    assert api.counts_by_type(result.transformations) == {"EMAIL": 1}
+    assert PRIVATE not in result.text
+
+
+def test_package_ships_a_type_marker() -> None:
+    """py.typed tells type checkers to use the package's own annotations."""
+    marker = Path(api.__file__).with_name("py.typed")
+
+    assert marker.is_file()
+    assert marker.read_bytes() == b""
+
+
 def test_path_checks_match_the_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Roots and credential-directory refusals are the server's own."""
     allowed = tmp_path / "allowed"

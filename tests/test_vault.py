@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,7 @@ from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
 from datafog_mcp import __main__ as cli
-from datafog_mcp import api, policy, server
+from datafog_mcp import api, paths, policy, server
 from datafog_mcp.server import mcp
 from datafog_mcp.vault import VAULT_DIR_VAR, VaultConfigError, vault_configured, vault_dir
 
@@ -314,25 +315,26 @@ def test_copies_are_never_written_into_the_vault(
     """
     No write lands in the vault, whichever way the destination is chosen.
 
-    The owner's copy directory is pointed at the vault for every route, so the
-    usual same-directory rule would allow the write and only the vault
-    refusal prevents it.
+    An explicit output path is refused by the path check. A policy whose copy
+    directory is the vault is refused when it is loaded, before any path is
+    looked at.
     """
     vault = _vault_with_entry(tmp_path, monkeypatch)
     source = tmp_path / "input.txt"
     source.write_text("contact avery@example.com", encoding="utf-8")
     shortcut = tmp_path / "shortcut"
     shortcut.symlink_to(vault, target_is_directory=True)
-    location = tmp_path / "policy.toml"
-    location.write_text(
-        f'version = 1\n[output]\ndirectory = "{vault.as_posix()}"\n', encoding="utf-8"
-    )
-    monkeypatch.setattr(policy, "POLICY_FILE", location)
     arguments: dict[str, Any] = {"path": str(source)}
     if route == "output-path":
         arguments["output_path"] = str(vault / "copy.txt")
     elif route == "output-symlink":
         arguments["output_path"] = str(shortcut / "copy.txt")
+    else:
+        location = tmp_path / "policy.toml"
+        location.write_text(
+            f'version = 1\n[output]\ndirectory = "{vault.as_posix()}"\n', encoding="utf-8"
+        )
+        monkeypatch.setattr(policy, "POLICY_FILE", location)
 
     with pytest.raises(ToolError) as refused:
         call(tool, **arguments)
@@ -340,6 +342,254 @@ def test_copies_are_never_written_into_the_vault(
     _assert_refused(refused.value)
     assert sorted(item.name for item in vault.iterdir()) == ["entry.txt"]
     assert source.read_text(encoding="utf-8") == "contact avery@example.com"
+
+
+def _policy_naming_the_vault(
+    setting: str, route: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """
+    Write a policy whose copy directory or scope folder leads to the vault.
+
+    Parameters:
+      setting: output, for the copy directory, or scope, for a scope folder.
+      route: How the policy path reaches the vault.
+      tmp_path: Holds the vault, the links, and the policy.
+      monkeypatch: Configures the vault and the policy location.
+    Returns:
+      The vault directory.
+    """
+    vault = _vault_with_entry(tmp_path, monkeypatch)
+    (vault / "inner").mkdir()
+    (tmp_path / "shortcut").symlink_to(vault, target_is_directory=True)
+    (tmp_path / "deep").symlink_to(vault / "inner", target_is_directory=True)
+    named = {
+        "vault": vault,
+        "inside": vault / "inner",
+        "symlink": tmp_path / "shortcut",
+        "symlink-inside": tmp_path / "deep",
+        "through-symlink": tmp_path / "shortcut" / "inner",
+        "missing-inside": vault / "later",
+    }[route]
+    body = (
+        f'[output]\ndirectory = "{named.as_posix()}"\n'
+        if setting == "output"
+        else f'[scope]\nfolders = ["{named.as_posix()}"]\n'
+    )
+    location = tmp_path / "policy.toml"
+    location.write_text("version = 1\n" + body, encoding="utf-8")
+    monkeypatch.setattr(policy, "POLICY_FILE", location)
+    return vault
+
+
+# A copy directory must exist, so only a scope folder can be a missing one.
+POLICY_ROUTES = [
+    (setting, route)
+    for setting in ("output", "scope")
+    for route in ("vault", "inside", "symlink", "symlink-inside", "through-symlink")
+] + [("scope", "missing-inside")]
+POLICY_REFUSALS = {
+    "output": "output directory is inside the application vault directory",
+    "scope": "scanning scope folder is inside the application vault directory",
+}
+
+
+@pytest.mark.parametrize(("setting", "route"), POLICY_ROUTES)
+def test_policy_naming_the_vault_is_refused_everywhere(
+    setting: str,
+    route: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """
+    A policy may not point its copy directory or a scope folder at the vault.
+
+    datafog_policy reports both settings, and the file tools refuse paths
+    inside the vault, so a policy naming the vault would let an agent put the
+    two together. The policy is unusable instead: every tool, the owner
+    command, and the Python interface refuse it with the same message.
+    """
+    vault = _policy_naming_the_vault(setting, route, tmp_path, monkeypatch)
+    source = tmp_path / "input.txt"
+    source.write_text("contact avery@example.com", encoding="utf-8")
+    expected = POLICY_REFUSALS[setting]
+    messages: list[str] = []
+
+    with pytest.raises(api.PolicyFileError) as through_api:
+        api.load_policy()
+    messages.append(str(through_api.value))
+    for tool in ("datafog_policy", *FILE_TOOLS):
+        with pytest.raises(ToolError) as through_tool:
+            call(tool, **({} if tool == "datafog_policy" else {"path": str(source)}))
+        messages.append(str(through_tool.value))
+    monkeypatch.setattr("sys.argv", ["datafog-mcp", "policy"])
+    with pytest.raises(SystemExit) as through_cli:
+        cli.main()
+
+    assert messages == [expected] * 6
+    assert str(through_cli.value) == f"datafog-mcp: {expected}"
+    printed = capsys.readouterr()
+    for text in (*messages, str(through_cli.value), printed.out, printed.err):
+        assert VAULT_NAME not in text
+        assert str(tmp_path) not in text
+        assert "shortcut" not in text
+    assert sorted(item.name for item in vault.iterdir()) == ["entry.txt", "inner"]
+    assert not (tmp_path / "input_redacted.txt").exists()
+
+
+def test_policy_paths_beside_or_around_the_vault_are_accepted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the vault and what is inside it are refused as policy paths."""
+    _vault_with_entry(tmp_path, monkeypatch)
+    beside = tmp_path / f"{VAULT_NAME}-copies"
+    beside.mkdir()
+    location = tmp_path / "policy.toml"
+    location.write_text(
+        f'version = 1\n[output]\ndirectory = "{beside.as_posix()}"\n'
+        f'[scope]\nfolders = ["{tmp_path.as_posix()}", "{beside.as_posix()}"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(policy, "POLICY_FILE", location)
+
+    current = api.load_policy()
+
+    assert current.directory == beside.resolve()
+    assert current.scope_folders == (tmp_path.resolve(), beside.resolve())
+
+
+def test_policy_paths_are_not_checked_against_an_absent_vault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without the variable, the same policy loads as before."""
+    vault = _policy_naming_the_vault("output", "vault", tmp_path, monkeypatch)
+    monkeypatch.delenv(VAULT_DIR_VAR)
+
+    assert api.load_policy().directory == vault.resolve()
+
+
+@pytest.mark.parametrize("setting", ["output", "scope"])
+def test_policy_paths_fail_closed_on_an_unusable_vault(
+    setting: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A vault setting that cannot be used cannot clear a policy path either."""
+    _policy_naming_the_vault(setting, "vault", tmp_path, monkeypatch)
+    monkeypatch.setenv(VAULT_DIR_VAR, f"relative/{VAULT_NAME}")
+
+    with pytest.raises(api.PolicyFileError, match="must be an absolute path") as refused:
+        api.load_policy()
+
+    assert VAULT_DIR_VAR in str(refused.value)
+    assert VAULT_NAME not in str(refused.value)
+    assert str(tmp_path) not in str(refused.value)
+
+
+COVERED_ROOT = (
+    f"${VAULT_DIR_VAR} is an allowed root or contains one, so every path would be refused"
+)
+
+
+def _vault_covering_a_root(kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Configure a vault that is an allowed root or contains one.
+
+    Parameters:
+      kind: How the vault relates to the root.
+      tmp_path: Holds the vault and the root.
+      monkeypatch: Sets both environment variables, or the home directory.
+    """
+    vault = tmp_path / VAULT_NAME
+    vault.mkdir()
+    (vault / "exports").mkdir()
+    (tmp_path / "shortcut").symlink_to(vault, target_is_directory=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    if kind == "home-default":
+        # No roots configured: the default root is the home directory.
+        monkeypatch.delenv("DATAFOG_MCP_ALLOWED_ROOTS")
+        monkeypatch.setattr(paths, "ROOTS_FILE", tmp_path / "absent" / "allowed_roots")
+        monkeypatch.setenv("HOME", str(vault))
+        monkeypatch.setenv(VAULT_DIR_VAR, "~")
+        return
+    root, location = {
+        "same": (vault, vault),
+        "contains": (vault / "exports", vault),
+        "root-symlink": (tmp_path / "shortcut", vault),
+        "vault-symlink": (vault, tmp_path / "shortcut"),
+        "filesystem-root": (elsewhere, Path(vault.anchor)),
+        "one-of-several": (vault / "exports", vault),
+    }[kind]
+    roots = [elsewhere, root] if kind == "one-of-several" else [root]
+    monkeypatch.setenv("DATAFOG_MCP_ALLOWED_ROOTS", os.pathsep.join(str(item) for item in roots))
+    monkeypatch.setenv(VAULT_DIR_VAR, str(location))
+
+
+COVERING = [
+    "same",
+    "contains",
+    "root-symlink",
+    "vault-symlink",
+    "filesystem-root",
+    "one-of-several",
+    "home-default",
+]
+
+
+@pytest.mark.parametrize("kind", COVERING)
+def test_server_refuses_to_start_when_the_vault_covers_an_allowed_root(
+    kind: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """
+    A vault that is a root, or contains one, would refuse every path.
+
+    The server stops before serving, and the owner command and datafog_policy
+    refuse the same way, so the listed roots can never be read beside
+    vault refusals to work out where the vault is.
+    """
+    _vault_covering_a_root(kind, tmp_path, monkeypatch)
+    started: list[bool] = []
+    monkeypatch.setattr(server.mcp, "run", lambda **_options: started.append(True))
+
+    with pytest.raises(SystemExit) as stopped:
+        server.run_server()
+    with pytest.raises(ToolError) as through_tool:
+        call("datafog_policy")
+    monkeypatch.setattr("sys.argv", ["datafog-mcp", "policy"])
+    with pytest.raises(SystemExit) as through_cli:
+        cli.main()
+
+    assert started == []
+    assert str(stopped.value) == f"datafog-mcp: {COVERED_ROOT}"
+    assert str(through_cli.value) == f"datafog-mcp: {COVERED_ROOT}"
+    assert str(through_tool.value) == COVERED_ROOT
+    printed = capsys.readouterr()
+    for text in (COVERED_ROOT, printed.out, printed.err):
+        assert VAULT_NAME not in text
+        assert str(tmp_path) not in text
+
+
+@pytest.mark.parametrize("kind", ["inside-root", "outside-roots", "no-roots", "broken-roots"])
+def test_server_starts_when_the_vault_covers_no_allowed_root(
+    kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A vault inside a root, or apart from every root, is the ordinary case."""
+    root = tmp_path / "allowed"
+    root.mkdir()
+    vault = (root if kind == "inside-root" else tmp_path) / VAULT_NAME
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+    monkeypatch.setenv(
+        "DATAFOG_MCP_ALLOWED_ROOTS",
+        {"no-roots": "", "broken-roots": "relative/root"}.get(kind, str(root)),
+    )
+    started: list[bool] = []
+    monkeypatch.setattr(server.mcp, "run", lambda **_options: started.append(True))
+
+    server.run_server()
+
+    assert started == [True]
 
 
 @pytest.mark.parametrize("tool", FILE_TOOLS)
