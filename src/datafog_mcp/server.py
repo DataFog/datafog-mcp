@@ -562,5 +562,11 @@ def run_server() -> None:
     server's only outbound request. The banner is suppressed, and the check is
     switched off as well so nothing else in FastMCP can trigger it.
     """
+    # A vault location that cannot be used would leave the vault unprotected
+    # or every file refused, so say why and stop before serving anything.
+    try:
+        vault_configured()
+    except VaultConfigError as exc:
+        raise SystemExit(f"datafog-mcp: {exc}") from None
     fastmcp.settings.check_for_updates = "off"
     mcp.run(transport="stdio", show_banner=False)

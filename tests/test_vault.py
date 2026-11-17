@@ -17,11 +17,17 @@ from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
 from datafog_mcp import __main__ as cli
+from datafog_mcp import api, policy, server
 from datafog_mcp.server import mcp
 from datafog_mcp.vault import VAULT_DIR_VAR, VaultConfigError, vault_configured, vault_dir
 
 # Distinctive, so a leaked location is easy to spot in any output.
 VAULT_NAME = "kept-private-vault"
+# What a vault entry might hold; synthetic, on a reserved example domain.
+ENTRY = "vaulted-person@example.com"
+
+FILE_TOOLS = ["datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove"]
+WRITE_TOOLS = ["datafog_redact", "datafog_mask", "datafog_remove"]
 
 
 def call(tool: str, **arguments: Any) -> dict[str, Any]:
@@ -31,6 +37,7 @@ def call(tool: str, **arguments: Any) -> dict[str, Any]:
         async with Client(mcp) as client:
             result = await client.call_tool(tool, arguments)
             assert VAULT_NAME not in str(result.content)
+            assert ENTRY not in str(result.content)
             assert result.structured_content is not None
             return result.structured_content
 
@@ -84,7 +91,7 @@ def test_home_relative_vault_is_expanded(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_vault_need_not_be_inside_allowed_roots(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Roots bound the files the tools touch, not application storage."""
+    """The vault is application storage and may sit outside every root."""
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     vault = tmp_path / VAULT_NAME
@@ -190,26 +197,212 @@ def test_owner_cli_reports_whether_a_vault_is_configured(
     assert VAULT_NAME not in output
 
 
-@pytest.mark.parametrize(
-    "tool", ["datafog_scan", "datafog_redact", "datafog_mask", "datafog_remove"]
-)
-def test_file_tools_do_not_consult_the_vault(
+@pytest.mark.parametrize("tool", FILE_TOOLS)
+def test_unusable_vault_refuses_file_tools(
     tool: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """
-    Scans and writes neither need nor mention the vault.
+    A vault setting that cannot be used refuses every path.
 
-    Nothing uses the vault yet, so an unusable location is reported by
-    datafog_policy and the owner command without stopping file tools.
+    The server will not start in this state. A program using the Python
+    interface can still reach it, and must not read a file the vault setting
+    was meant to protect.
     """
     source = tmp_path / "input.txt"
     source.write_text("contact avery@example.com", encoding="utf-8")
     monkeypatch.setenv(VAULT_DIR_VAR, f"relative/{VAULT_NAME}")
 
-    result = call(tool, path=str(source))
+    with pytest.raises(ToolError, match="must be an absolute path") as refused:
+        call(tool, path=str(source))
+    with pytest.raises(api.RootPolicyError, match="must be an absolute path"):
+        api.resolve_input(str(source))
+
+    assert VAULT_DIR_VAR in str(refused.value)
+    assert VAULT_NAME not in str(refused.value)
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["input.txt"]
+
+
+def _vault_with_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Configure a vault inside the allowed roots holding one synthetic entry."""
+    vault = tmp_path / VAULT_NAME
+    vault.mkdir()
+    (vault / "entry.txt").write_text(f"token-1 = {ENTRY}\n", encoding="utf-8")
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+    return vault
+
+
+def _assert_refused(error: BaseException) -> None:
+    """A vault refusal says what happened and nothing about the vault."""
+    message = str(error)
+    assert "inside the application vault directory" in message
+    assert VAULT_NAME not in message
+    assert ENTRY not in message
+    assert "entry.txt" not in message
+
+
+@pytest.mark.parametrize("tool", [*FILE_TOOLS, "datafog_policy"])
+@pytest.mark.parametrize("target", ["entry", "directory", "missing", "symlink-file", "symlink-dir"])
+def test_paths_inside_the_vault_are_refused(
+    tool: str, target: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    No tool reads the vault, by its own path or through a link.
+
+    The vault sits inside an allowed root here, so only the vault refusal
+    stands between the tools and its entries.
+    """
+    vault = _vault_with_entry(tmp_path, monkeypatch)
+    links = tmp_path / "links"
+    links.mkdir()
+    if target == "entry":
+        path = vault / "entry.txt"
+    elif target == "directory":
+        path = vault
+    elif target == "missing":
+        path = vault / "absent" / "later.txt"
+    elif target == "symlink-file":
+        path = links / "notes.txt"
+        path.symlink_to(vault / "entry.txt")
+    else:
+        (links / "shortcut").symlink_to(vault, target_is_directory=True)
+        path = links / "shortcut" / "entry.txt"
+
+    with pytest.raises(ToolError) as refused:
+        call(tool, path=str(path))
+
+    _assert_refused(refused.value)
+    assert sorted(item.name for item in vault.iterdir()) == ["entry.txt"]
+    assert sorted(item.name for item in tmp_path.iterdir()) == sorted(["links", VAULT_NAME])
+
+
+def test_python_interface_refuses_vault_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The public resolve and read functions apply the same refusal."""
+    vault = _vault_with_entry(tmp_path, monkeypatch)
+    link = tmp_path / "notes.txt"
+    link.symlink_to(vault / "entry.txt")
+
+    for path in (vault / "entry.txt", vault, link):
+        with pytest.raises(api.PathNotAllowed) as resolved:
+            api.resolve_input(str(path))
+        _assert_refused(resolved.value)
+        with pytest.raises(api.PathNotAllowed) as read:
+            api.read_text_file(str(path), api.DEFAULT_MAX_BYTES)
+        _assert_refused(read.value)
+
+
+def test_a_vault_that_does_not_exist_yet_is_still_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusal goes by location, so it holds before the vault is created."""
+    vault = tmp_path / VAULT_NAME
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+
+    with pytest.raises(ToolError) as refused:
+        call("datafog_scan", path=str(vault / "entry.txt"))
+
+    _assert_refused(refused.value)
+    assert not vault.exists()
+
+
+@pytest.mark.parametrize("tool", WRITE_TOOLS)
+@pytest.mark.parametrize("route", ["output-path", "output-symlink", "policy-directory"])
+def test_copies_are_never_written_into_the_vault(
+    tool: str, route: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    No write lands in the vault, whichever way the destination is chosen.
+
+    The owner's copy directory is pointed at the vault for every route, so the
+    usual same-directory rule would allow the write and only the vault
+    refusal prevents it.
+    """
+    vault = _vault_with_entry(tmp_path, monkeypatch)
+    source = tmp_path / "input.txt"
+    source.write_text("contact avery@example.com", encoding="utf-8")
+    shortcut = tmp_path / "shortcut"
+    shortcut.symlink_to(vault, target_is_directory=True)
+    location = tmp_path / "policy.toml"
+    location.write_text(
+        f'version = 1\n[output]\ndirectory = "{vault.as_posix()}"\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(policy, "POLICY_FILE", location)
+    arguments: dict[str, Any] = {"path": str(source)}
+    if route == "output-path":
+        arguments["output_path"] = str(vault / "copy.txt")
+    elif route == "output-symlink":
+        arguments["output_path"] = str(shortcut / "copy.txt")
+
+    with pytest.raises(ToolError) as refused:
+        call(tool, **arguments)
+
+    _assert_refused(refused.value)
+    assert sorted(item.name for item in vault.iterdir()) == ["entry.txt"]
+    assert source.read_text(encoding="utf-8") == "contact avery@example.com"
+
+
+@pytest.mark.parametrize("tool", FILE_TOOLS)
+def test_files_beside_the_vault_are_unaffected(
+    tool: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the vault is refused, not its neighbours or similarly named paths."""
+    _vault_with_entry(tmp_path, monkeypatch)
+    lookalike = tmp_path / f"{VAULT_NAME}-export"
+    lookalike.mkdir()
+    source = lookalike / "input.txt"
+    source.write_text("contact avery@example.com", encoding="utf-8")
+
+    async def run() -> dict[str, Any]:
+        # Not the shared helper: this path legitimately contains the vault's
+        # name as a prefix of a different directory.
+        async with Client(mcp) as client:
+            result = await client.call_tool(tool, {"path": str(source)})
+            assert result.structured_content is not None
+            return result.structured_content
+
+    result = asyncio.run(run())
 
     assert result["counts"] == {"EMAIL": 1}
     assert "vault_configured" not in result
+    assert ENTRY not in str(result)
+
+
+@pytest.mark.parametrize("kind", sorted(INVALID))
+def test_server_refuses_to_start_with_an_unusable_vault(
+    kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing is served: the transport is never started."""
+    build, reason = INVALID[kind]
+    monkeypatch.setenv(VAULT_DIR_VAR, build(tmp_path))
+    started: list[bool] = []
+    monkeypatch.setattr(server.mcp, "run", lambda **_options: started.append(True))
+
+    with pytest.raises(SystemExit) as stopped:
+        server.run_server()
+
+    message = str(stopped.value)
+    assert message.startswith("datafog-mcp: ")
+    assert reason in message
+    assert VAULT_DIR_VAR in message
+    assert VAULT_NAME not in message
+    assert str(tmp_path) not in message
+    assert started == []
+
+
+@pytest.mark.parametrize("configured", [True, False])
+def test_server_starts_with_a_usable_or_absent_vault(
+    configured: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The startup check only stops an unusable setting."""
+    if configured:
+        monkeypatch.setenv(VAULT_DIR_VAR, str(tmp_path / VAULT_NAME))
+    started: list[bool] = []
+    monkeypatch.setattr(server.mcp, "run", lambda **_options: started.append(True))
+
+    server.run_server()
+
+    assert started == [True]
 
 
 def test_no_tool_was_added_for_the_vault() -> None:

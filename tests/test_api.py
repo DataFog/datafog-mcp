@@ -36,7 +36,7 @@ import sys
 
 import datafog_mcp.api as api
 
-current = api.load_output_policy()
+current = api.load_policy()
 api.allowed_roots()
 api.vault_configured()
 result = api.process_text("email\\ncontact@example.com\\n", policy=current, source="rows.csv")
@@ -100,14 +100,14 @@ def test_public_names_are_exactly_the_documented_ones() -> None:
         "Located",
         "NotARegularFile",
         "NotText",
-        "OutputPolicy",
-        "OutputPolicyError",
         "OverlapConflict",
         "PathNotAllowed",
         "PathNotFound",
-        "PolicyError",
+        "Policy",
+        "PolicyFileError",
         "ReadError",
         "RootPolicy",
+        "RootPolicyError",
         "SUPPORTED_ENTITIES",
         "ScanConfig",
         "Strategy",
@@ -115,7 +115,7 @@ def test_public_names_are_exactly_the_documented_ones() -> None:
         "VaultConfigError",
         "allowed_roots",
         "counts_by_type",
-        "load_output_policy",
+        "load_policy",
         "process_csv",
         "process_text",
         "read_text_file",
@@ -126,6 +126,24 @@ def test_public_names_are_exactly_the_documented_ones() -> None:
     ]
     for name in api.__all__:
         assert hasattr(api, name), name
+
+
+def test_earlier_names_still_work_from_their_modules() -> None:
+    """
+    The names used before the interface was named are aliases, not copies.
+
+    Internal code and existing tests keep using them; the public interface
+    exports only the new ones.
+    """
+    from datafog_mcp import paths
+
+    assert policy.OutputPolicy is api.Policy
+    assert policy.load_output_policy is api.load_policy
+    assert policy.OutputPolicyError is api.PolicyFileError
+    assert paths.PolicyError is api.RootPolicyError
+    assert not {"OutputPolicy", "load_output_policy", "OutputPolicyError", "PolicyError"} & set(
+        api.__all__
+    )
 
 
 def test_no_public_name_writes_files() -> None:
@@ -139,7 +157,7 @@ def test_policy_text_forms_never_show_allowlist_values(
     """Logging a policy, or its allowlist mapping, prints counts only."""
     configure(tmp_path, monkeypatch, f'[allow.exact]\nEMAIL = ["{APPROVED}", "second@example.com"]')
 
-    current = api.load_output_policy()
+    current = api.load_policy()
 
     assert current.allowlist_counts == {"EMAIL": 2}
     assert current.is_allowlisted("EMAIL", APPROVED)
@@ -176,8 +194,8 @@ def test_policy_errors_never_show_allowlist_values(
     """A rejected policy is described without quoting what it contained."""
     configure(tmp_path, monkeypatch, body)
 
-    with pytest.raises(api.OutputPolicyError) as refused:
-        api.load_output_policy()
+    with pytest.raises(api.PolicyFileError) as refused:
+        api.load_policy()
 
     assert APPROVED not in str(refused.value)
     assert APPROVED not in repr(refused.value)
@@ -192,7 +210,7 @@ def test_process_text_applies_allowlists_and_returns_no_values(
     configure(tmp_path, monkeypatch, f'[allow.exact]\nEMAIL = ["{APPROVED}"]')
     text = f"{APPROVED} and {PRIVATE}"
 
-    result = api.process_text(text, policy=api.load_output_policy())
+    result = api.process_text(text, policy=api.load_policy())
 
     assert result.text == f"{APPROVED} and [EMAIL]"
     assert api.counts_by_type(result.transformations) == {"EMAIL": 1}
@@ -207,7 +225,7 @@ def test_process_text_scans_table_cells_with_header_context() -> None:
     """A table is read cell by cell, and its header labels the column."""
     text = f"NPI,email\r\n{NPI},{PRIVATE}\r\n"
 
-    result = api.process_text(text, policy=api.OutputPolicy(), source="providers.csv")
+    result = api.process_text(text, policy=api.Policy(), source="providers.csv")
 
     assert result.text == 'NPI,email\r\n"[NPI]","[EMAIL]"\r\n'
     located = [
@@ -220,7 +238,7 @@ def test_process_text_scans_table_cells_with_header_context() -> None:
     assert PRIVATE not in repr(result.transformations)
     # The same text as plain text has no header context, so the bare number
     # is not reported as an NPI.
-    flat = api.process_text(text, policy=api.OutputPolicy(), source="providers.txt")
+    flat = api.process_text(text, policy=api.Policy(), source="providers.txt")
     assert api.counts_by_type(flat.transformations) == {"EMAIL": 1}
 
 
@@ -262,7 +280,7 @@ def test_process_text_agrees_with_the_scan_tool(
     entity_types = options.get("entity_types")
     direct = api.process_text(
         api.read_text_file(str(source), api.DEFAULT_MAX_BYTES).text,
-        policy=api.load_output_policy(),
+        policy=api.load_policy(),
         source=source,
         config=api.ScanConfig(entities=tuple(entity_types)) if entity_types else None,
         input_format=options.get("input_format", "auto"),
@@ -283,9 +301,9 @@ def test_process_text_reports_overlaps_and_bad_tables_without_content() -> None:
     uri = "postgres://app:s3cretpw@db.example.com:5432/app"
 
     with pytest.raises(api.OverlapConflict) as overlap:
-        api.process_text(f"{uri};{card}", policy=api.OutputPolicy())
+        api.process_text(f"{uri};{card}", policy=api.Policy())
     with pytest.raises(api.CsvError) as malformed:
-        api.process_text(f'email\n"{PRIVATE}\n', policy=api.OutputPolicy(), source="rows.csv")
+        api.process_text(f'email\n"{PRIVATE}\n', policy=api.Policy(), source="rows.csv")
 
     assert "CREDENTIAL_URI, CREDIT_CARD" in str(overlap.value)
     assert card not in str(overlap.value)
@@ -330,7 +348,7 @@ def test_scope_and_workflow_are_readable_from_the_snapshot(
         '[workflow]\non_findings = "stop"\ntransform_strategy = "mask"',
     )
 
-    current = api.load_output_policy()
+    current = api.load_policy()
 
     assert current.in_scope(exports.resolve() / "rows.CSV")
     assert not current.in_scope(exports.resolve() / "rows.txt")

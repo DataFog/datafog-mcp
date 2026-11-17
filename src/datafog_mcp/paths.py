@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .policy import OutputPolicy, OutputPolicyError, load_output_policy
+from .vault import VaultConfigError, vault_dir
 
 ROOTS_FILE = Path.home() / ".config" / "datafog" / "allowed_roots"
 
@@ -180,6 +181,32 @@ def _is_denied(resolved: Path) -> bool:
     return any(part.casefold() in DENIED_DIR_NAMES for part in resolved.parts)
 
 
+def _in_vault(resolved: Path) -> bool:
+    """
+    Report whether a path is the application vault or lies inside it.
+
+    The vault holds what the tools exist to keep out of context, so it is
+    refused like a credential directory. Paths are compared after symlink
+    resolution, and also by device and inode when the vault exists, so a
+    differently-cased spelling on a case-insensitive filesystem still counts.
+    An unusable vault setting refuses every path rather than protecting
+    nothing.
+
+    Parameters:
+      resolved: An already-resolved absolute path.
+    Returns:
+      True if the path is inside the configured vault directory.
+    """
+    try:
+        vault = vault_dir()
+    except VaultConfigError as exc:
+        raise PolicyError(str(exc)) from None
+    if vault is None:
+        return False
+    candidates = (resolved, *resolved.parents)
+    return vault in candidates or any(_same_directory(parent, vault) for parent in candidates)
+
+
 def _check(resolved: Path) -> Path:
     """
     Apply the root policy to an already-resolved path.
@@ -194,6 +221,10 @@ def _check(resolved: Path) -> Path:
     """
     if _is_denied(resolved):
         raise PathNotAllowed(f"{resolved} is in a credential directory")
+    if _in_vault(resolved):
+        # No path in the message: after symlink resolution it would show
+        # where the vault is, which tool responses never reveal.
+        raise PathNotAllowed("the requested path is inside the application vault directory")
 
     current = policy()
     if not current.roots:

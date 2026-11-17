@@ -11,8 +11,6 @@ import os
 import stat
 from pathlib import Path
 
-from .paths import DENIED_DIR_NAMES
-
 VAULT_DIR_VAR = "DATAFOG_VAULT_DIR"
 
 
@@ -32,12 +30,15 @@ def vault_dir() -> Path | None:
     setting, so a mistake cannot silently turn the vault off. The directory
     may not exist yet; whatever exists at the path must be a directory.
     Symlinks are followed before the credential-directory check. The vault
-    does not have to be inside the allowed roots, which bound the files the
-    tools read and write, not application storage.
+    may sit inside or outside the allowed roots; either way the file tools
+    refuse every path inside it.
 
     Returns:
       The resolved directory, or None when the variable is unset.
     """
+    # Import here: the path access layer consults this module on every check.
+    from .paths import DENIED_DIR_NAMES
+
     raw = os.environ.get(VAULT_DIR_VAR)
     if raw is None:
         return None

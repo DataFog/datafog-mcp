@@ -75,11 +75,13 @@ Completed scans return advisory `policy.action`: `ask` (default), `transform`, o
 
 An application that launches the server, such as a plugin, can tell it where that application keeps its vault by setting `DATAFOG_VAULT_DIR` in the server's environment. This only records the location: the server does not create the directory, read from it, or write to it.
 
-The environment variable is the only source. There is no `policy.toml` setting and no default location, so a server started without the variable has no vault, and nothing in a configuration file can add or change one. The value is read on each request.
+The environment variable is the only source. There is no `policy.toml` setting and no default location, so a server started without the variable has no vault, and nothing in a configuration file can add or change one.
 
-The value must be an absolute path or start with `~`. Symlinks are followed, and a location inside a credential directory (`.ssh`, `.gnupg`, `.aws`, `.kube`, `gcloud`) is refused. The directory does not have to exist yet, but anything already at the path must be a directory. It does not have to be inside the allowed roots, which bound the files the tools read and write.
+The value must be an absolute path or start with `~`. Symlinks are followed, and a location inside a credential directory (`.ssh`, `.gnupg`, `.aws`, `.kube`, `gcloud`) is refused. The directory does not have to exist yet, but anything already at the path must be a directory. It may sit inside or outside the allowed roots.
 
-A variable that is set but unusable, including one set to an empty value, is an error rather than an absent setting. `datafog_policy` and `datafog-mcp policy` fail with a message naming the variable and the problem, never the value. Scans and writes do not use the vault and are unaffected.
+**The file tools never touch the vault.** `datafog_scan`, `datafog_redact`, `datafog_mask`, `datafog_remove`, and the path check in `datafog_policy` refuse any path that is the vault directory or inside it, as they refuse credential directories. This applies to input paths, `output_path`, and an owner-configured output directory, and it is checked after symlinks are followed, so a link into the vault is refused too. The error says the path is inside the application vault directory and names neither the path nor the vault.
+
+**An unusable value stops the server from starting.** A variable that is set but unusable, including one set to an empty value, is an error rather than an absent setting. The server exits at startup with a message on stderr naming the variable and the problem, never the value. `datafog-mcp policy` fails the same way; `datafog-mcp roots` is unaffected. A launcher with no vault must leave the variable out of the server's environment rather than set it to an empty string.
 
 `datafog_policy` returns `vault_configured`, `true` or `false`. The location is never included in a tool response or error message. `datafog-mcp policy` prints the same yes or no.
 

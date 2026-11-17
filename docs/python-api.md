@@ -6,7 +6,9 @@
 from datafog_mcp import api
 ```
 
-Importing it does not import `fastmcp` or `mcp` and starts nothing. Measured with `python -X importtime` on a Linux arm64 test machine with Python 3.12, the import takes roughly 15 to 20 ms, against roughly 300 to 450 ms for `datafog_mcp.server`. Only the names listed here are supported; other modules in the package can change without notice.
+> **Provisional.** This interface is new in this release. Names and signatures may change in the next minor version; pin the package version if you depend on it.
+
+Importing it does not import `fastmcp` or `mcp` and starts nothing. Measured with `python -X importtime` on a Linux arm64 test machine with Python 3.12, the import takes roughly 15 to 20 ms, against roughly 300 to 450 ms for `datafog_mcp.server`. Only the names listed here belong to the interface; other modules in the package can change without notice.
 
 ## Example
 
@@ -15,7 +17,7 @@ from datafog_mcp import api
 
 
 def check(path: str) -> dict[str, int]:
-    current = api.load_output_policy()  # one snapshot per request
+    current = api.load_policy()  # one snapshot per request
     content = api.read_text_file(path, api.DEFAULT_MAX_BYTES)  # enforces allowed roots
     if not current.in_scope(content.path):
         return {}
@@ -29,18 +31,20 @@ Report failures by exception type unless the exception is one of those listed un
 
 | Name | Signature | Purpose |
 | --- | --- | --- |
-| `load_output_policy` | `() -> OutputPolicy` | Read and validate `policy.toml`. An absent file gives the defaults; an unusable one raises `OutputPolicyError`. |
-| `OutputPolicy.is_allowlisted` | `(entity_type: str, value: str) -> bool` | Whether the owner approved exactly this value for this type. |
-| `OutputPolicy.allowlist_counts` | `dict[str, int]` | Approved values per entity type, as counts. |
-| `OutputPolicy.in_scope` | `(path: Path) -> bool` | Whether a resolved path is in the routine scanning scope. Check roots first. |
-| `OutputPolicy.scope_folders`, `available_scope_folders`, `missing_scope_folders` | `tuple[Path, ...]` | Configured, usable, and missing scope folders. |
-| `OutputPolicy.scope_extensions` | `tuple[str, ...]` | Lower-cased extensions in scope; empty means all. |
-| `OutputPolicy.on_findings` | `"ask" \| "transform" \| "stop"` (`Action`) | Advisory workflow action. |
-| `OutputPolicy.transform_strategy` | `"redact" \| "mask" \| "remove"` (`Strategy`) | Suggested strategy for `transform`. |
-| `OutputPolicy.directory` | `Path \| None` | Owner-chosen copy destination. |
-| `OutputPolicy.warnings` | `list[str]` | Content-free warnings, such as missing scope folders. |
+| `load_policy` | `() -> Policy` | Read and validate `policy.toml`. An absent file gives the defaults; an unusable one raises `PolicyFileError`. |
+| `Policy.is_allowlisted` | `(entity_type: str, value: str) -> bool` | Whether the owner approved exactly this value for this type. |
+| `Policy.allowlist_counts` | `dict[str, int]` | Approved values per entity type, as counts. |
+| `Policy.in_scope` | `(path: Path) -> bool` | Whether a resolved path is in the routine scanning scope. Check roots first. |
+| `Policy.scope_folders`, `available_scope_folders`, `missing_scope_folders` | `tuple[Path, ...]` | Configured, usable, and missing scope folders. |
+| `Policy.scope_extensions` | `tuple[str, ...]` | Lower-cased extensions in scope; empty means all. |
+| `Policy.on_findings` | `"ask" \| "transform" \| "stop"` (`Action`) | Advisory workflow action. |
+| `Policy.transform_strategy` | `"redact" \| "mask" \| "remove"` (`Strategy`) | Suggested strategy for `transform`. |
+| `Policy.directory` | `Path \| None` | Owner-chosen copy destination. |
+| `Policy.warnings` | `list[str]` | Content-free warnings, such as missing scope folders. |
 
-A loaded policy is an immutable snapshot. Load one per request and pass it through.
+A loaded policy is an immutable snapshot. Load one per request and pass it through. `PolicyFileError` is raised for an unusable `policy.toml`.
+
+`Policy`, `load_policy`, `PolicyFileError`, and `RootPolicyError` are this interface's names for what the package's own modules call `OutputPolicy`, `load_output_policy`, `OutputPolicyError`, and `PolicyError`. They are the same objects, so a traceback shows the older class names. The older names remain importable from `datafog_mcp.policy` and `datafog_mcp.paths` but are not part of this interface.
 
 ## Allowed roots and reading
 
@@ -52,13 +56,15 @@ A loaded policy is an immutable snapshot. Load one per request and pass it throu
 | `read_text_file` | `(path: str, max_bytes: int) -> FileContent` | Check the path, then read UTF-8 text up to the limit. Raises `PathNotAllowed` or a `ReadError` (`PathNotFound`, `NotARegularFile`, `FileTooLarge`, `NotText`). |
 | `ALLOWED_ROOTS_VAR`, `DENIED_DIR_NAMES`, `DEFAULT_MAX_BYTES` | constants | The roots variable name, the always-refused directory names, and the 10 MB limit. |
 
-`PolicyError` is the `PathNotAllowed` raised when the roots configuration itself is unusable.
+`RootPolicyError` is the `PathNotAllowed` raised when the roots configuration, or the vault setting, is itself unusable. It is not raised by `load_policy`; that raises `PolicyFileError`.
+
+`resolve_input` and `read_text_file` refuse every path inside the configured vault directory, after following symlinks, exactly as the server's tools do.
 
 ## Scanning
 
 | Name | Signature | Purpose |
 | --- | --- | --- |
-| `process_text` | `(text: str, *, policy: OutputPolicy, source: str \| Path = "", config: ScanConfig \| None = None, strategy: Strategy = "redact", input_format: InputFormat = "auto", has_header: bool = True) -> CellResult` | Run the server's pipeline on text already in memory. |
+| `process_text` | `(text: str, *, policy: Policy, source: str \| Path = "", config: ScanConfig \| None = None, strategy: Strategy = "redact", input_format: InputFormat = "auto", has_header: bool = True) -> CellResult` | Run the server's pipeline on text already in memory. |
 | `ScanConfig` | `(entities: tuple[str, ...] = DEFAULT_ENTITIES, max_bytes: int = DEFAULT_MAX_BYTES)` | The entity types to detect. Unsupported or empty selections raise `ValueError`. |
 | `DEFAULT_ENTITIES`, `SUPPORTED_ENTITIES` | `tuple[str, ...]`, `frozenset[str]` | The default and selectable entity types. |
 | `counts_by_type` | `(items: Sequence[Located]) -> dict[str, int]` | Tally results per entity type. |
@@ -81,14 +87,14 @@ It raises `CsvError` for a malformed table and `OverlapConflict` when detections
 | `vault_configured` | `() -> bool` | Whether a usable location is set. Raises `VaultConfigError`. |
 | `VAULT_DIR_VAR` | constant | The variable's name. |
 
-See [application vault location](policy.md#application-vault-location) for the rules. These functions validate the location only; nothing here reads or writes the vault.
+See [application vault location](policy.md#application-vault-location) for the rules. These functions validate the location only; nothing here reads or writes the vault. Leave the variable out of the environment when there is no vault: an empty value is an error.
 
 ## What is and is not returned
 
 - **Matched values are not returned.** Results carry entity types, counts, and positions. `text` is the transformed input, so it still holds everything that was not detected; discard it if you only need to know what was found. Table header text is not returned.
 - **Approved allowlist values are not returned.** `is_allowlisted` answers yes or no for a value you already hold, and `allowlist_counts` gives counts. The values do not appear in `repr()` or `str()` of the policy or of its allowlist mapping, or in any error message. The policy object holds them in memory in order to match, so do not serialize its attributes yourself.
-- **These errors are written to be shown:** `OutputPolicyError`, `CsvError`, `OverlapConflict`, and `VaultConfigError`. Their messages hold no file content, no allowlist value, and no vault location.
-- **Path errors name paths.** `PathNotAllowed`, `PolicyError`, and `ReadError` messages include the path involved and the allowed roots, as the server's tool errors do. A filename can identify a person on its own.
+- **These errors are written to be shown:** `PolicyFileError`, `CsvError`, `OverlapConflict`, and `VaultConfigError`. Their messages hold no file content, no allowlist value, and no vault location.
+- **Path errors name paths.** `PathNotAllowed`, `RootPolicyError`, and `ReadError` messages include the path involved and the allowed roots, as the server's tool errors do. A filename can identify a person on its own. A path refused for being inside the vault is the exception: that message names no path.
 - **`vault_dir` returns the location** to your program. The MCP server reports only whether one is configured.
 - **Any other exception may quote the text.** An unexpected engine failure can carry input in its message. Report its type, as the server does, not its message.
 

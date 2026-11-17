@@ -58,7 +58,7 @@ class _ExactValues(frozenset[str]):
 
 
 @dataclass(frozen=True)
-class OutputPolicy:
+class Policy:
     """
     Immutable owner settings, including the fixed copy destination.
 
@@ -120,6 +120,11 @@ class OutputPolicy:
         return folder_match and extension_match
 
 
+# The names this class and its loader had before the public interface was
+# named. Existing code and tests use them; new code should use Policy.
+OutputPolicy = Policy
+
+
 def _table(value: object, keys: set[str]) -> dict[str, object]:
     if not isinstance(value, dict) or set(value) - keys:
         raise OutputPolicyError("policy contains an unknown setting or invalid table")
@@ -172,10 +177,10 @@ def _scope_paths(value: object) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
     return tuple(folders), tuple(missing)
 
 
-def load_output_policy() -> OutputPolicy:
+def load_policy() -> Policy:
     """Load a strict version-1 policy; only an absent file uses the default."""
     if not os.path.lexists(POLICY_FILE):
-        return OutputPolicy()
+        return Policy()
     if not POLICY_FILE.is_file():
         raise OutputPolicyError("output policy is not a regular file")
     try:
@@ -217,7 +222,7 @@ def load_output_policy() -> OutputPolicy:
         raise OutputPolicyError("workflow action must be ask, transform, or stop")
     if strategy not in ("redact", "mask", "remove"):
         raise OutputPolicyError("workflow transformation must be redact, mask, or remove")
-    return OutputPolicy(
+    return Policy(
         directory,
         allow_exact,
         folders,
@@ -226,3 +231,6 @@ def load_output_policy() -> OutputPolicy:
         strategy,
         missing_folders,
     )
+
+
+load_output_policy = load_policy

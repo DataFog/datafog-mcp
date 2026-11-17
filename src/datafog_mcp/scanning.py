@@ -184,7 +184,7 @@ def process_text(
 
     Parameters:
       text: The decoded text to process.
-      policy: A snapshot from load_output_policy; its exact allowlists apply.
+      policy: A snapshot from load_policy; its exact allowlists apply.
       source: The path or filename the text came from. Only the name is used,
       to choose a format when input_format is auto; nothing is read from disk.
       config: The entity types to detect, or None for the defaults.
