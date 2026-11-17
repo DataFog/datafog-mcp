@@ -27,7 +27,7 @@ Some types are narrower than their names suggest:
 - **`CREDENTIAL_URI`** covers PostgreSQL connection strings that include a password (`postgres://` or `postgresql://`). Other schemes, such as MySQL, Redis, or MongoDB, are not detected.
 - **`PRIVATE_KEY`** is a complete PEM private-key block. Public keys and certificates are not reported.
 
-When two detections of different types partly overlap and neither contains the other, replacing either one would leave part of the other value in the copy. Scans and writes refuse such a file with an error naming the entity types involved; nothing is written. Run the tool again with a narrower `entity_types` selection. One detection wholly inside another, such as the address-shaped part of a connection string, is resolved normally.
+When two detections of different types partly overlap and neither contains the other, replacing either one would leave part of the other value in the copy. Scans and writes refuse such a file with an error naming the entity types involved; nothing is written. Run the tool again with a narrower `entity_types` selection. One detection wholly inside another, such as the address-shaped part of a connection string, is resolved normally. A future release may instead replace the whole overlapping span with a single marker rather than refuse the file; until then the refusal is the intended behavior.
 
 Credential detection is not a substitute for a dedicated secret scanner. A clean result means none of the selected detectors matched; it is not proof a file holds no sensitive data or secrets.
 

@@ -158,3 +158,63 @@ of the timing/memory matrix above. Token figures use the existing benchmark
 estimate, not an exact tokenizer or a guarantee for every client's context
 budget. Rerun the size/format/density matrix on the combined code before the
 10 MB limit change (#61).
+
+## Rerun on datafog-core 1.5.0
+
+The matrix above was rerun after the server moved to datafog-core 1.5.0, on the change that raised the requirement to 1.5.0 (with fastmcp 3.4.7, before the locked dependencies were updated to 3.4.11). Since the original runs, CSV files take the cell path, the server passes its entity selection to Core (finding 3), and scan responses stop listing locations above 700 findings (finding 1).
+
+**These numbers come from a different machine and are not comparable run for run with the tables above.** They were measured on a shared Linux aarch64 virtual machine with 4 CPUs and 3.9 GB of memory, no swap, Python 3.12.15, datafog-core 1.5.0. The original tables came from a 16-CPU x86_64 desktop. The virtual machine is noisy: other work on the host changes timings between runs. Use this section to check the budgets on current code and a small machine, not to measure a speedup or slowdown against the earlier hardware. The reference runner is still to be measured.
+
+Method as above, with these differences:
+
+- Three runs per cell at 1 and 10 MB; ranges cover every run, every format on the path, and both scan and redact. One run per cell at 100 MB.
+- The matrix was run in several invocations of `matrix`, one or two formats at a time, because of a time limit on each command in this environment. Each tool call still ran in its own fresh process.
+- At 100 MB, calls ran under a 3.3 GB address-space limit (`ulimit -v`) so a failed allocation could not take the machine down.
+- Every completed run found exactly the planted entities. Importing the server accounts for about 79 MB of each peak.
+
+### Text path (plain text, JSON, SQL)
+
+| MB | Density | Call time (s) | Peak memory (MB) | Scan response (tokens) |
+|---|---|---|---|---|
+| 1 | 0 | 0.04–0.05 | 97 | 74 |
+| 1 | 10 | 0.05–0.06 | 97 | 218–230 |
+| 1 | 1,000 | 0.05–0.07 | 97 | 98–99 |
+| 1 | 30,000 | 0.10–0.13 | 138–145 | 102 |
+| 1 | max | 0.10–0.12 | 138–143 | 101–102 |
+| 10 | 0 | 0.27–0.34 | 131–161 | 74–75 |
+| 10 | 10 | 0.29–0.37 | 132–161 | 1,658–1,670 |
+| 10 | 1,000 | 0.31–0.44 | 147–176 | 101 |
+| 10 | 30,000 | 0.83–1.15 | 525–560 | 104–105 |
+| 10 | max | 0.81–1.03 | 515–560 | 104 |
+| 100 | 0 | 2.46–3.92 | 486–785 | 74–75 |
+| 100 | 30,000 | not measured | not measured | not measured |
+| 100 | max | not measured | not measured | not measured |
+
+The dense and max cells at 100 MB were attempted for plain text only, and both scan and redact failed with an allocation error under the 3.3 GB limit. This machine cannot hold them, so they say nothing new beyond confirming that dense 100 MB files need more than about 3 GB. JSON and SQL were run at 100 MB for the control density only.
+
+### CSV cell path (narrow and wide CSV)
+
+| MB | Density | Call time (s) | Peak memory (MB) | Scan response (tokens) |
+|---|---|---|---|---|
+| 1 | 0 | 0.52–0.58 | 94 | 75–76 |
+| 1 | 10 | 0.52–0.59 | 94–95 | 305 |
+| 1 | 1,000 | 0.52–0.60 | 94 | 100 |
+| 1 | 30,000 | 0.38–0.41 | 104–105 | 104 |
+| 1 | max | 0.35–0.38 | 103–105 | 103–104 |
+| 10 | 0 | 5.09–5.55 | 112–122 | 76 |
+| 10 | 10 | 5.11–5.72 | 147–157 | 2,532–2,560 |
+| 10 | 1,000 | 5.08–5.57 | 149–159 | 103 |
+| 10 | 30,000 | 3.55–3.95 | 247–248 | 106–107 |
+| 10 | max | 3.35–3.65 | 235–250 | 106 |
+| 100 | 0 | 50.61–54.39 | 376–386 | 76–77 |
+
+Dense and max were not attempted at 100 MB on this path.
+
+### What the rerun shows
+
+- **The 10 MB limit holds within all three budgets on this machine.** The slowest call at 10 MB took 5.72 s (CSV) against the 30 s budget, the highest peak was 560 MB (dense text) against 1 GB, and the largest scan response was 2,560 tokens against 25,000. Write-tool responses stayed under 95 tokens.
+- **Response size no longer fails.** Above 700 findings a scan returns counts without locations, so the largest responses now come from sparse files whose findings are all listed, not from dense ones.
+- **Control-density memory on the text path is much lower than in the original runs** (131–161 MB at 10 MB, 486–785 MB at 100 MB, against 239–335 MB and 1,392–2,458 MB). This is the direction finding 3 predicted once Core accepted a type selection. The machines differ, so treat the size of the drop as indicative only.
+- **100 MB is still not supportable.** The CSV path takes 51 to 54 s at the control density here, over the 30 s budget and close to the 60 s ceiling, and dense text files exceed the memory this machine has.
+
+The raw results were produced with the commands under [Reproducing](#reproducing), with `--sizes`, `--formats`, and `--densities` narrowing each invocation and `--repeats 3`.
