@@ -62,6 +62,25 @@ def test_exact_allowlist_applies_to_scans_and_all_writes(
     assert source.read_text(encoding="utf-8") == text
 
 
+@pytest.mark.parametrize("tool", TOOLS)
+def test_labeled_email_matches_its_exact_allowlist_entry(
+    tool: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Core 1.4 trims the label, so the approved address behind it is kept."""
+    text = f"email={APPROVED}\nemail={PRIVATE}\n"
+    source = tmp_path / "input.txt"
+    source.write_text(text, encoding="utf-8")
+    configure(tmp_path, monkeypatch, f'[allow.exact]\nEMAIL = ["{APPROVED}"]')
+    result = call(tool, source, entity_types=["EMAIL"])
+    assert result["counts"] == {"EMAIL": 1}
+    if tool == "datafog_scan":
+        assert result["findings"][0]["start"] == text.index(PRIVATE)
+    else:
+        output = Path(result["output_path"]).read_text(encoding="utf-8")
+        assert output.startswith(f"email={APPROVED}\n")
+        assert PRIVATE not in output
+
+
 def test_allowlists_are_entity_specific(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source = tmp_path / "input.txt"
     source.write_text("NPI: 2125550100", encoding="utf-8")
