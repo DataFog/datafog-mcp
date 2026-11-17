@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .policy import OutputPolicy, OutputPolicyError, load_output_policy
-from .vault import VaultConfigError, vault_dir
+from .vault import VAULT_DIR_VAR, VaultConfigError, vault_dir
 
 ROOTS_FILE = Path.home() / ".config" / "datafog" / "allowed_roots"
 
@@ -205,6 +205,31 @@ def _in_vault(resolved: Path) -> bool:
         return False
     candidates = (resolved, *resolved.parents)
     return vault in candidates or any(_same_directory(parent, vault) for parent in candidates)
+
+
+def check_vault_against_roots() -> None:
+    """
+    Refuse a vault that is an allowed root or contains one.
+
+    Every path under such a root is inside the vault, so every request would
+    be refused, and the reported roots together with those refusals would show
+    where the vault is. A roots configuration that cannot be read is left to
+    the path checks, which refuse every path and say why.
+
+    Raises:
+      VaultConfigError: The vault covers an allowed root, or its setting is
+      unusable. The message names the variable, never a location.
+    """
+    if vault_dir() is None:
+        return
+    try:
+        roots = policy().roots
+    except PolicyError:
+        return
+    if any(_in_vault(root) for root in roots):
+        raise VaultConfigError(
+            f"${VAULT_DIR_VAR} is an allowed root or contains one, so every path would be refused"
+        )
 
 
 def _check(resolved: Path) -> Path:

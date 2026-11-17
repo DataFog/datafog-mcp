@@ -16,6 +16,7 @@ from .paths import (
     ROOTS_FILE,
     ROOTS_TEMPLATE,
     PolicyError,
+    check_vault_against_roots,
     policy,
 )
 from .policy import POLICY_FILE, POLICY_TEMPLATE, OutputPolicyError, load_output_policy
@@ -102,6 +103,7 @@ def main() -> None:
             try:
                 current = load_output_policy()
                 has_vault = vault_configured()
+                check_vault_against_roots()
             except (OutputPolicyError, VaultConfigError) as exc:
                 raise SystemExit(f"datafog-mcp: {exc}") from None
             print(f"Config file: {POLICY_FILE}")

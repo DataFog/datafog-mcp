@@ -20,7 +20,13 @@ from datafog_mcp.findings import (
     render,
     render_transformation,
 )
-from datafog_mcp.paths import PathNotAllowed, allowed_roots, resolve_input, resolve_output
+from datafog_mcp.paths import (
+    PathNotAllowed,
+    allowed_roots,
+    check_vault_against_roots,
+    resolve_input,
+    resolve_output,
+)
 from datafog_mcp.policy import OutputPolicy, OutputPolicyError, load_output_policy
 from datafog_mcp.reader import (
     ReadError,
@@ -152,6 +158,9 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
             raise ToolError(str(exc)) from None
         try:
             has_vault = vault_configured()
+            # The roots file can change after startup; never list a root
+            # that the vault covers.
+            check_vault_against_roots()
         except VaultConfigError as exc:
             raise ToolError(str(exc)) from None
         result: dict[str, Any] = {
@@ -564,8 +573,10 @@ def run_server() -> None:
     """
     # A vault location that cannot be used would leave the vault unprotected
     # or every file refused, so say why and stop before serving anything.
+    # The same goes for a vault that covers an allowed root.
     try:
         vault_configured()
+        check_vault_against_roots()
     except VaultConfigError as exc:
         raise SystemExit(f"datafog-mcp: {exc}") from None
     fastmcp.settings.check_for_updates = "off"

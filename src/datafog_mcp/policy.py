@@ -139,6 +139,31 @@ def _strings(value: object) -> tuple[str, ...]:
     return tuple(cast(list[str], value))
 
 
+def _refuse_vault(resolved: Path, message: str) -> None:
+    """
+    Reject a policy path that is the application vault or lies inside it.
+
+    The tools report the copy destination and the scope folders, and refuse
+    every path inside the vault. A policy naming the vault would let those two
+    answers be put together into the vault's location, so it is unusable. The
+    comparison is the one the path checks make, after symlink resolution.
+
+    Parameters:
+      resolved: An already-resolved policy path.
+      message: The refusal to raise; it names neither the path nor the vault.
+    """
+    # Import here: the path access layer also loads this policy for writes.
+    from .paths import PathNotAllowed, _in_vault
+
+    try:
+        inside = _in_vault(resolved)
+    except PathNotAllowed as exc:
+        # An unusable vault setting; its message names the variable only.
+        raise OutputPolicyError(str(exc)) from None
+    if inside:
+        raise OutputPolicyError(message)
+
+
 def _scope_paths(value: object) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
     # Import here: the path access layer also loads this policy for writes.
     from .paths import DENIED_DIR_NAMES, PathNotAllowed, allowed_roots
@@ -164,6 +189,7 @@ def _scope_paths(value: object) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
             raise OutputPolicyError("scanning scope folder cannot be resolved") from None
         if any(part.casefold() in DENIED_DIR_NAMES for part in folder.parts):
             raise OutputPolicyError("scanning scope folder is in a refused credential directory")
+        _refuse_vault(folder, "scanning scope folder is inside the application vault directory")
         if not any(folder == root or root in folder.parents for root in roots):
             raise OutputPolicyError("scanning scope folder is outside allowed roots")
         try:
@@ -207,6 +233,7 @@ def load_policy() -> Policy:
                 raise OutputPolicyError("output directory must already exist and be a directory")
         except (OSError, RuntimeError):
             raise OutputPolicyError("output directory cannot be resolved") from None
+        _refuse_vault(directory, "output directory is inside the application vault directory")
     allow = _table(data.get("allow", {}), {"exact"})
     exact = _table(allow.get("exact", {}), set(SUPPORTED_ENTITIES))
     allow_exact = {kind: frozenset(_strings(values)) for kind, values in exact.items()}
