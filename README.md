@@ -23,7 +23,7 @@
 
 DataFog MCP lets an AI agent detect personal data and credentials in local files, then create a copy with matched values redacted, masked, or removed. Detection runs on [DataFog Core](https://github.com/DataFog/datafog-core). Tool responses contain counts, locations, and copy paths—never file contents or matched values.
 
-**Stable v1.0.0.** Tested with Claude Code. CI runs on Linux; development uses macOS. Windows and other MCP clients have not been validated.
+**Stable v1.1.0.** Tested with Claude Code. CI runs on Linux; development uses macOS. Windows and other MCP clients have not been validated.
 
 ## Quickstart
 

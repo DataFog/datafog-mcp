@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "datafog-mcp"
-version = "1.0.0"
+version = "1.1.0"
 description = "Local PII and credential detection and redaction for AI agents (MCP server)"
 readme = "README.md"
 license = "MIT"
