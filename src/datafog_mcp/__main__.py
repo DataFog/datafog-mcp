@@ -19,6 +19,7 @@ from .paths import (
     policy,
 )
 from .policy import POLICY_FILE, POLICY_TEMPLATE, OutputPolicyError, load_output_policy
+from .vault import VAULT_DIR_VAR, VaultConfigError, vault_configured
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -100,7 +101,8 @@ def main() -> None:
         else:
             try:
                 current = load_output_policy()
-            except OutputPolicyError as exc:
+                has_vault = vault_configured()
+            except (OutputPolicyError, VaultConfigError) as exc:
                 raise SystemExit(f"datafog-mcp: {exc}") from None
             print(f"Config file: {POLICY_FILE}")
             print(f"Copy destination: {current.directory or 'beside the input'}")
@@ -117,7 +119,11 @@ def main() -> None:
             print(f"Suggested transformation: {current.transform_strategy}")
             print(
                 "Exact allowlist counts: "
-                + ", ".join(f"{kind}={len(values)}" for kind, values in current.allow_exact.items())
+                + ", ".join(f"{kind}={count}" for kind, count in current.allowlist_counts.items())
+            )
+            print(
+                "Application vault: "
+                + (f"configured by ${VAULT_DIR_VAR}" if has_vault else "not configured")
             )
         return
 

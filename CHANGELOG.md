@@ -6,6 +6,8 @@ Notable changes to datafog-mcp. The format follows [Keep a Changelog](https://ke
 
 ### Added
 
+- `datafog_mcp.api` is a documented Python interface to the owner policy, allowed-root checks, file reading, and the scan pipeline, including CSV/TSV cell-level scanning. Importing it does not import the MCP server or its dependencies, so a short-lived process such as a hook can reuse the server's rules. Scan results carry entity types and positions, never matched values, and approved allowlist values are absent from the policy's printed forms and from error messages. See [Python interface](docs/python-api.md).
+- `DATAFOG_VAULT_DIR` lets the application that launches the server supply a vault directory. The location must be absolute or start with `~` and may not be in a credential directory; an unusable value is an error. `datafog_policy` reports only `vault_configured`, true or false, and `datafog-mcp policy` shows the same; neither reveals the location. Nothing reads from or writes to the vault yet.
 - `ACCOUNT_NUMBER` and `STREET_ADDRESS` can be selected through `entity_types` in all four file tools, and used as `[allow.exact]` keys in `policy.toml`. Both match only after a label, such as `Account number:` or `Street address:`, and both are off by default.
 
 ### Changed

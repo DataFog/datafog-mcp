@@ -7,14 +7,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import fastmcp
-from datafog_core import DataFogFindingError, scan, transform
+from datafog_core import scan, transform
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from datafog_mcp import __version__
-from datafog_mcp.config import SUPPORTED_ENTITIES, ScanConfig, Strategy, transform_config
-from datafog_mcp.csv_processing import CellResult, CsvError, process_csv
+from datafog_mcp.config import SUPPORTED_ENTITIES, ScanConfig, Strategy
+from datafog_mcp.csv_processing import CellResult, CsvError
 from datafog_mcp.findings import (
     Mode,
     render,
@@ -28,10 +28,10 @@ from datafog_mcp.reader import (
     read_text_file,
     write_text_file,
 )
+from datafog_mcp.scanning import InputFormat, OverlapConflict, process_with_engine
+from datafog_mcp.vault import VaultConfigError, vault_configured
 
 if TYPE_CHECKING:
-    from datafog_core import Finding, _ScanConfig
-
     EntityType = str
 else:
     # Built from the engine's own list, so the schema cannot drift from what a
@@ -41,7 +41,6 @@ else:
 # Omit for the default set. An empty list asks for nothing, so the schema
 # declares it invalid rather than reading it as the default.
 EntitySelection = Annotated[list[EntityType], Field(min_length=1)] | None
-InputFormat = Literal["auto", "text", "csv", "tsv", "env", "sql"]
 
 mcp = FastMCP(
     name="datafog",
@@ -119,42 +118,6 @@ def _config_from(entity_types: list[str] | None) -> ScanConfig:
         raise ToolError(str(exc)) from exc
 
 
-class OverlapConflict(ValueError):
-    """Detections partly overlap; the message names entity types, never values."""
-
-
-def _overlap_conflict(found: list[Finding], index: int | None) -> OverlapConflict:
-    """
-    Describe a refused overlap without quoting the file.
-
-    Core 1.x refuses to transform when two detections partly overlap and
-    neither contains the other: replacing either one alone would leave the
-    rest of the other in the copy. The server fails the request the same way
-    rather than choose, and names only the entity types involved so the
-    caller can narrow entity_types.
-
-    Parameters:
-      found: The findings passed to the engine.
-      index: The engine's index of a finding it could not cover, if given.
-    Returns:
-      An error whose message is safe to show.
-    """
-    kinds: set[str] = set()
-    if index is not None and 0 <= index < len(found):
-        target = found[index].codepoint_range
-        kinds = {
-            item.entity_type
-            for item in found
-            if item.codepoint_range.start < target.end and target.start < item.codepoint_range.end
-        }
-    named = f" ({', '.join(sorted(kinds))})" if kinds else ""
-    return OverlapConflict(
-        f"Detections of different types partly overlap{named}, so replacing one would "
-        "leave part of another in place. No result was produced and no copy was written. "
-        "Retry with a narrower entity_types selection."
-    )
-
-
 def _request_policy() -> OutputPolicy:
     """Load and validate the owner's settings before accessing file contents."""
     try:
@@ -177,6 +140,8 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
     Returns:
       Scope, copy destination, allowlist counts by type, and workflow guidance.
       An optional scope match is configuration guidance, never a clean scan.
+      vault_configured says only whether the launching application supplied
+      a vault location; the location itself is never returned.
     """
     with _contained():
         current = _request_policy()
@@ -184,6 +149,10 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
             roots = allowed_roots()
             resolved = resolve_input(path) if path is not None else None
         except PathNotAllowed as exc:
+            raise ToolError(str(exc)) from None
+        try:
+            has_vault = vault_configured()
+        except VaultConfigError as exc:
             raise ToolError(str(exc)) from None
         result: dict[str, Any] = {
             "advisory": True,
@@ -195,39 +164,18 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
                 "extensions": list(current.scope_extensions),
             },
             "output_directory": str(current.directory) if current.directory else None,
-            "allowlist_counts": {kind: len(values) for kind, values in current.allow_exact.items()},
+            "allowlist_counts": current.allowlist_counts,
             "workflow": {
                 "on_findings": current.on_findings,
                 "transform_strategy": current.transform_strategy,
             },
+            "vault_configured": has_vault,
         }
         if current.warnings:
             result["warnings"] = current.warnings
         if resolved is not None:
             result["scan_before_read"] = current.in_scope(resolved)
         return result
-
-
-def _core_scan_config(
-    path: Path, input_format: InputFormat, entities: tuple[str, ...]
-) -> _ScanConfig:
-    """Select Core detectors and email boundaries before scanning.
-
-    Auto recognizes .env, .env.*, *.env, and *.sql filenames, ignoring case.
-    Other files retain plain-text boundaries, including CSV and TSV files.
-    An explicit format overrides the filename.
-    """
-    selected_entities = list(dict.fromkeys(entities))
-    if input_format in ("text", "env", "sql"):
-        return {"format": input_format, "entities": selected_entities}
-    if input_format in ("csv", "tsv"):
-        return {"format": "text", "entities": selected_entities}
-    name = path.name.lower()
-    if name == ".env" or name.startswith(".env.") or name.endswith(".env"):
-        return {"format": "env", "entities": selected_entities}
-    if name.endswith(".sql"):
-        return {"format": "sql", "entities": selected_entities}
-    return {"format": "text", "entities": selected_entities}
 
 
 @mcp.tool
@@ -599,39 +547,11 @@ def _process_file(
     current: OutputPolicy,
 ) -> CellResult:
     """Run Core on decoded table cells or on plain text, in a worker thread."""
-    selected: str = input_format
-    if selected == "auto":
-        selected = {".csv": "csv", ".tsv": "tsv"}.get(source.suffix.lower(), "text")
-
-    core_config: _ScanConfig = _core_scan_config(source, input_format, config.entities)
-    if selected in ("csv", "tsv"):
-        core_config["format"] = "text"
-
-    def process(text: str, value_start: int) -> CellResult:
-        found = [
-            item
-            for item in scan(text, core_config)
-            if config.keeps(item.entity_type)
-            and value_start <= item.codepoint_range.start < item.codepoint_range.end <= len(text)
-            and not current.is_allowlisted(
-                item.entity_type, text[item.codepoint_range.start : item.codepoint_range.end]
-            )
-        ]
-        # Core resolves overlapping detectors identically for scans and writes.
-        try:
-            return transform(text, found, transform_config(strategy))
-        except DataFogFindingError as exc:
-            # Any other finding error is unexpected and may quote the file,
-            # so it is left for _contained to replace.
-            if getattr(exc, "code", None) != "review_conflict":
-                raise
-            raise _overlap_conflict(found, getattr(exc, "finding_index", None)) from None
-
-    if selected in ("csv", "tsv"):
-        return process_csv(
-            text, process, delimiter="," if selected == "csv" else "\t", has_header=has_header
-        )
-    return process(text, 0)
+    # scan and transform are read from this module at call time, so replacing
+    # either one here reaches the shared pipeline.
+    return process_with_engine(
+        text, source, config, strategy, input_format, has_header, current, scan, transform
+    )
 
 
 def run_server() -> None:

@@ -48,12 +48,29 @@ class OutputPolicyError(ValueError):
     """An unusable policy; its message never includes policy values."""
 
 
+class _ExactValues(frozenset[str]):
+    """Approved values for one entity type, printed as a count only."""
+
+    def __repr__(self) -> str:
+        return f"<{len(self)} exact values>"
+
+    __str__ = __repr__
+
+
 @dataclass(frozen=True)
 class OutputPolicy:
-    """Immutable owner settings, including the fixed copy destination."""
+    """
+    Immutable owner settings, including the fixed copy destination.
+
+    Approved allowlist values are held only so is_allowlisted can match them.
+    They are left out of repr() and str(), and the supported ways to consult
+    them are is_allowlisted, which answers yes or no, and allowlist_counts.
+    """
 
     directory: Path | None = None
-    allow_exact: Mapping[str, frozenset[str]] = field(default_factory=lambda: MappingProxyType({}))
+    allow_exact: Mapping[str, frozenset[str]] = field(
+        default_factory=lambda: MappingProxyType({}), repr=False
+    )
     scope_folders: tuple[Path, ...] = ()
     scope_extensions: tuple[str, ...] = ()
     on_findings: Action = "ask"
@@ -65,13 +82,18 @@ class OutputPolicy:
             self,
             "allow_exact",
             MappingProxyType(
-                {kind: frozenset(values) for kind, values in self.allow_exact.items()}
+                {kind: _ExactValues(values) for kind, values in self.allow_exact.items()}
             ),
         )
 
     def is_allowlisted(self, entity_type: str, value: str) -> bool:
         """Match an owner-approved value exactly and only for its entity type."""
         return value in self.allow_exact.get(entity_type, frozenset())
+
+    @property
+    def allowlist_counts(self) -> dict[str, int]:
+        """How many values are approved per entity type, without the values."""
+        return {kind: len(values) for kind, values in self.allow_exact.items()}
 
     @property
     def available_scope_folders(self) -> tuple[Path, ...]:

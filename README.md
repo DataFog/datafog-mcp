@@ -112,6 +112,7 @@ Responses do include paths and metadata, which enter the agent's context and may
 - [Detection and copy behavior](docs/detection.md)
 - [Supported formats and limits](docs/file-formats.md)
 - [Allowed roots and owner policy](docs/policy.md)
+- [Python interface](docs/python-api.md)
 - [Privacy and security boundaries](docs/privacy.md)
 - [Uninstall](docs/uninstall.md)
 - [Development and local checks](docs/development.md)

@@ -71,6 +71,18 @@ The agent can call `datafog_policy` to discover scope, workflow settings, copy d
 
 Completed scans return advisory `policy.action`: `ask` (default), `transform`, or `stop` when non-allowlisted findings remain; `proceed` when none remain under the selected detectors and allowlists. `transform` includes the suggested strategy (`redact`, `mask`, or `remove`). Scans never automatically write a copy. Explicit write tools retain the strategy requested by the caller. These actions guide the agent; the server cannot prevent access through another tool. Failed scans or invalid policies never authorize a fallback read of the original.
 
+## Application vault location
+
+An application that launches the server, such as a plugin, can tell it where that application keeps its vault by setting `DATAFOG_VAULT_DIR` in the server's environment. This only records the location: the server does not create the directory, read from it, or write to it.
+
+The environment variable is the only source. There is no `policy.toml` setting and no default location, so a server started without the variable has no vault, and nothing in a configuration file can add or change one. The value is read on each request.
+
+The value must be an absolute path or start with `~`. Symlinks are followed, and a location inside a credential directory (`.ssh`, `.gnupg`, `.aws`, `.kube`, `gcloud`) is refused. The directory does not have to exist yet, but anything already at the path must be a directory. It does not have to be inside the allowed roots, which bound the files the tools read and write.
+
+A variable that is set but unusable, including one set to an empty value, is an error rather than an absent setting. `datafog_policy` and `datafog-mcp policy` fail with a message naming the variable and the problem, never the value. Scans and writes do not use the vault and are unaffected.
+
+`datafog_policy` returns `vault_configured`, `true` or `false`. The location is never included in a tool response or error message. `datafog-mcp policy` prints the same yes or no.
+
 `datafog-mcp policy` shows the same settings to the owner, including counts instead of exact allowlist values. The parser rejects unknown sections/settings so configuration mistakes cannot silently disable a safeguard. Each request uses one immutable policy snapshot; edits apply to subsequent requests.
 
 [Back to the README](../README.md)
