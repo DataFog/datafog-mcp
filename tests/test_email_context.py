@@ -52,6 +52,12 @@ def call(tool: str, **arguments: Any) -> dict[str, Any]:
         # Core 1.4 trims label syntax from plain-text email spans: one leading
         # identifier= prefix is not part of the address, and an inner = stays.
         ("export.env", "text", "EMAIL=customer=tag@example.com", "customer=tag@example.com"),
+        # An explicit text format overrides an ENV or SQL filename. The row
+        # above gives the same span under text and env boundaries, so these
+        # two carry the proof: env and sql boundaries would each report the
+        # whole string here, and text boundaries report the address alone.
+        ("export.env", "text", "my.key=tag@example.com", "tag@example.com"),
+        ("x.sql", "text", "customer=tag@example.com", "tag@example.com"),
         ("address.txt", "auto", "customer=tag@example.com", "tag@example.com"),
         ("address.csv", "auto", "email\ncustomer=tag@example.com\n", "tag@example.com"),
     ],
@@ -102,6 +108,23 @@ def test_email_boundaries_preserve_surrounding_syntax(
     assert address not in json.dumps(result)
     assert result["counts"] == scanned["counts"]
     assert path.read_bytes() == original
+
+
+def test_plain_text_keeps_a_single_quote_after_a_label_in_the_match(tmp_path: Path) -> None:
+    """A label and an opening double quote are trimmed; a single quote is not."""
+    path = tmp_path / "notes.txt"
+    source = "email='li.wei@example.com'\nemail=\"li.wei@example.com\"\n"
+    path.write_text(source, encoding="utf-8")
+    scanned = call("datafog_scan", path=str(path), entity_types=["EMAIL"])
+    single = source.index("'li.wei")
+    double = source.index('"li.wei') + 1
+    assert [(item["start"], item["end"]) for item in scanned["findings"]] == [
+        (single, single + len("'li.wei@example.com")),
+        (double, double + len("li.wei@example.com")),
+    ]
+    result = call("datafog_redact", path=str(path), entity_types=["EMAIL"])
+    copy = Path(result["output_path"]).read_text(encoding="utf-8")
+    assert copy == 'email=[EMAIL]\'\nemail="[EMAIL]"\n'
 
 
 @pytest.mark.parametrize(
