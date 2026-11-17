@@ -78,7 +78,11 @@ jobs:
       # 3.10 has none. dnspython is only reached through email-validator's
       # deliverability check, which pydantic turns off, so this server never
       # parses DNS messages.
+      #
+      # CVE-2026-128089 (dnspython): the fix, 2.9.2, also needs Python 3.11.
+      # The flaw is in parsing WKS records from zone-file text, which this
+      # server never does, for the same reason.
       - name: Audit
         run: >-
           uvx --from 'pip-audit>=2.9,<3' pip-audit --disable-pip -r fresh.txt
-          ${{ matrix.python-version == '3.10' && '--ignore-vuln CVE-2026-114605' || '' }}
+          ${{ matrix.python-version == '3.10' && '--ignore-vuln CVE-2026-114605 --ignore-vuln CVE-2026-128089' || '' }}
