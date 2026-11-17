@@ -348,6 +348,14 @@ def test_process_text_accepts_every_documented_format_and_strategy(
     assert PRIVATE not in result.text
 
 
+def test_package_ships_a_type_marker() -> None:
+    """py.typed tells type checkers to use the package's own annotations."""
+    marker = Path(api.__file__).with_name("py.typed")
+
+    assert marker.is_file()
+    assert marker.read_bytes() == b""
+
+
 def test_path_checks_match_the_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Roots and credential-directory refusals are the server's own."""
     allowed = tmp_path / "allowed"

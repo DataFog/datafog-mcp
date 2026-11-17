@@ -65,6 +65,7 @@ class Policy:
     Approved allowlist values are held only so is_allowlisted can match them.
     They are left out of repr() and str(), and the supported ways to consult
     them are is_allowlisted, which answers yes or no, and allowlist_counts.
+    allow_exact itself holds the values in memory: never serialize or log it.
     """
 
     directory: Path | None = None
