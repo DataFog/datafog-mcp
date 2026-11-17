@@ -10,13 +10,15 @@ Notable changes to datafog-mcp. The format follows [Keep a Changelog](https://ke
 
 ### Changed
 
-- Require datafog-core 1.1.0 or later, below 1.4. The default entity types are unchanged: the server keeps its own list and does not follow Core's wider default scan, so `DATE`, `ZIP_CODE`, `PHONE`, `IP_ADDRESS`, `ACCOUNT_NUMBER`, and `STREET_ADDRESS` remain opt-in. Core 1.4 and later are excluded for now because they report less of an email address that follows `=` or a quote in plain text.
+- Require datafog-core 1.5.0 or later, below 2. The default entity types are unchanged: the server keeps its own list and does not follow Core's wider default scan, so `DATE`, `ZIP_CODE`, `PHONE`, `IP_ADDRESS`, `ACCOUNT_NUMBER`, and `STREET_ADDRESS` remain opt-in.
 - The same file can produce different findings than under datafog-core 0.4.4:
-  - A credit card number followed by a space or hyphen and more digits is now found; it was missed before. A card match no longer extends into digits that follow it, and digits spanning a phone number and a date are no longer reported as a card.
-  - An email address whose local part begins with a ZIP- or SSN-shaped number and a separator, such as `12345.name@example.com`, is reported from after the separator. The leading digits and separator stay in copies unless another selected type matches them.
+  - In plain text and in CSV/TSV cells, an email address is reported without label syntax in front of it: one leading `name=` prefix and an opening quote are no longer part of the match, so `email=alice@example.com` is found as `alice@example.com` and the copy keeps `email=`. A later `=` stays in the address, so `EMAIL=customer=tag@example.com` is found as `customer=tag@example.com`. A prefix ending in `&`, `?`, or `|` is trimmed the same way. Previously the whole string was matched and replaced. ENV and SQL formats keep their existing boundaries.
+  - An email address whose local part begins with a ZIP- or SSN-shaped number and a separator, such as `12345.name@example.com`, is reported from after the separator, in every format. The leading digits and separator stay in copies unless another selected type matches them.
+  - A credit card number followed by a space or hyphen and more digits is now found; it was missed before. A card match no longer extends into digits that follow it, digits spanning a phone number and a date are no longer reported as a card, and more card formats are recognized, including 14-digit numbers.
+  - A GitHub or Stripe key directly after `/` is now found.
   - A PostgreSQL connection string no longer absorbs the start of a card number that follows a hyphen.
-  - With opt-in types selected: a ZIP code directly before a hyphen and a date is now found, and an IPv6 address directly after a date and a hyphen is reported without its first group.
-- Scans and writes now refuse a file in which two detections of different types partly overlap, naming the entity types and suggesting a narrower `entity_types` selection. Previously one detection was kept and the rest of the other value stayed in the copy; for example, a card number immediately followed by a quote and an email address kept most of its digits. One detection wholly inside another is still resolved as before.
+  - With opt-in types selected: `DATE` now matches the date in an ISO timestamp such as `2026-10-01T10:00:00Z`. A ZIP code, phone number, or IPv6 address joined to a neighboring number by `.`, `,`, or `-` can be reported differently or not at all; for example, a ZIP code directly before a hyphen and a date is now found, while one directly after a hyphenated number is not.
+- Scans and writes now refuse a file in which two detections of different types partly overlap, naming the entity types and suggesting a narrower `entity_types` selection. Previously one detection was kept and the rest of the other value could stay in the copy. An example is a PostgreSQL connection string followed by `;` and a card number. One detection wholly inside another is still resolved as before.
 
 ### Security
 

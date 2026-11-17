@@ -49,9 +49,11 @@ def call(tool: str, **arguments: Any) -> dict[str, Any]:
         ),
         ("export.txt", "env", "EMAIL=customer=tag@example.com", "customer=tag@example.com"),
         ("export.txt", "sql", "SELECT 'o''connor@example.com';", "o''connor@example.com"),
-        ("export.env", "text", "EMAIL=customer=tag@example.com", "EMAIL=customer=tag@example.com"),
-        ("address.txt", "auto", "customer=tag@example.com", "customer=tag@example.com"),
-        ("address.csv", "auto", "email\ncustomer=tag@example.com\n", "customer=tag@example.com"),
+        # Core 1.4 trims label syntax from plain-text email spans: one leading
+        # identifier= prefix is not part of the address, and an inner = stays.
+        ("export.env", "text", "EMAIL=customer=tag@example.com", "customer=tag@example.com"),
+        ("address.txt", "auto", "customer=tag@example.com", "tag@example.com"),
+        ("address.csv", "auto", "email\ncustomer=tag@example.com\n", "tag@example.com"),
     ],
 )
 def test_email_boundaries_preserve_surrounding_syntax(
@@ -80,12 +82,20 @@ def test_email_boundaries_preserve_surrounding_syntax(
         if tool == "datafog_mask"
         else ""
     )
-    if filename == "address.csv" and input_format == "auto":
-        # Table processing preserves the email span and quotes the changed cell,
-        # including an empty cell when removal clears the sole column.
-        assert (finding["record"], finding["column"]) == (1, 1)
-        replacement = '"' + replacement + '"'
     expected = source[:start] + replacement + source[start + len(address) :]
+    if filename == "address.csv" and input_format == "auto":
+        # Table processing preserves the email span and quotes the whole
+        # changed cell, which since core 1.4 keeps its "customer=" label.
+        assert (finding["record"], finding["column"]) == (1, 1)
+        cell = source.index("\n") + 1
+        expected = (
+            source[:cell]
+            + '"'
+            + source[cell:start]
+            + replacement
+            + '"'
+            + source[start + len(address) :]
+        )
     output = Path(result["output_path"])
     assert output != path
     assert output.read_bytes().decode() == expected
