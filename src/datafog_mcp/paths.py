@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .policy import OutputPolicy, OutputPolicyError, load_output_policy
+from .vault import VAULT_DIR_VAR, VaultConfigError, vault_dir
 
 ROOTS_FILE = Path.home() / ".config" / "datafog" / "allowed_roots"
 
@@ -180,30 +181,120 @@ def _is_denied(resolved: Path) -> bool:
     return any(part.casefold() in DENIED_DIR_NAMES for part in resolved.parts)
 
 
-def _check(resolved: Path) -> Path:
+def _in_vault(resolved: Path) -> bool:
+    """
+    Report whether a path is the application vault or lies inside it.
+
+    The vault holds what the tools exist to keep out of context, so it is
+    refused like a credential directory. Paths are compared after symlink
+    resolution, and also by device and inode when the vault exists, so a
+    differently-cased spelling on a case-insensitive filesystem still counts.
+    An unusable vault setting refuses every path rather than protecting
+    nothing.
+
+    Parameters:
+      resolved: An already-resolved absolute path.
+    Returns:
+      True if the path is inside the configured vault directory.
+    """
+    try:
+        vault = vault_dir()
+    except VaultConfigError as exc:
+        raise PolicyError(str(exc)) from None
+    if vault is None:
+        return False
+    candidates = (resolved, *resolved.parents)
+    return vault in candidates or any(_same_directory(parent, vault) for parent in candidates)
+
+
+def check_vault_against_roots() -> None:
+    """
+    Refuse a vault that is an allowed root or contains one.
+
+    Every path under such a root is inside the vault, so every request would
+    be refused, and the reported roots together with those refusals would show
+    where the vault is. A roots configuration that cannot be read is left to
+    the path checks, which refuse every path and say why.
+
+    Raises:
+      VaultConfigError: The vault covers an allowed root, or its setting is
+      unusable. The message names the variable, never a location.
+    """
+    if vault_dir() is None:
+        return
+    try:
+        roots = policy().roots
+    except PolicyError:
+        return
+    if any(_in_vault(root) for root in roots):
+        raise VaultConfigError(
+            f"${VAULT_DIR_VAR} is an allowed root or contains one, so every path would be refused"
+        )
+
+
+def _check(resolved: Path, requested: Path | None = None) -> Path:
     """
     Apply the root policy to an already-resolved path.
 
     The policy is resolved once, so the check and the refusal message cannot
     disagree about which roots were in force.
 
+    A vault that covers an allowed root is refused before anything else, on
+    every request: the roots file can change after startup, and any refusal
+    that named such a root would name a location inside the vault.
+
+    A path outside the allowed roots gets the same refusal whether or not it
+    is inside the vault, so a caller cannot confirm where the vault is by
+    guessing. That refusal therefore names the path as it was requested,
+    never the location a symlink led to. The vault's own refusal is given
+    only inside an allowed root, where the path would otherwise be served.
+
     Parameters:
       resolved: An already-resolved absolute path.
+      requested: The same path as the caller wrote it, absolute but with its
+        symlinks unresolved. Defaults to the resolved path.
     Returns:
-      The same path, when policy permits it.
+      The resolved path, when policy permits it.
     """
-    if _is_denied(resolved):
+    try:
+        check_vault_against_roots()
+    except VaultConfigError as exc:
+        # The message names the variable only, never a path or a root.
+        raise PolicyError(str(exc)) from None
+    in_vault = _in_vault(resolved)
+    if not in_vault and _is_denied(resolved):
         raise PathNotAllowed(f"{resolved} is in a credential directory")
 
     current = policy()
+    inside_roots = any(resolved == root or root in resolved.parents for root in current.roots)
+    if in_vault and inside_roots:
+        # No path in the message: after symlink resolution it would show
+        # where the vault is, which tool responses never reveal.
+        raise PathNotAllowed("the requested path is inside the application vault directory")
+
+    shown = resolved if requested is None else requested
     if not current.roots:
-        raise PathNotAllowed(
-            f"{resolved} is refused because {current.source} lists no allowed roots"
-        )
-    if not any(resolved == root or root in resolved.parents for root in current.roots):
+        raise PathNotAllowed(f"{shown} is refused because {current.source} lists no allowed roots")
+    if not inside_roots:
         roots = ", ".join(str(root) for root in current.roots)
-        raise PathNotAllowed(f"{resolved} is outside the allowed roots: {roots}")
+        if shown != resolved:
+            raise PathNotAllowed(
+                f"{shown} resolves to a location outside the allowed roots: {roots}"
+            )
+        raise PathNotAllowed(f"{shown} is outside the allowed roots: {roots}")
     return resolved
+
+
+def _as_requested(path: Path) -> Path:
+    """
+    Make a requested path absolute without following its symlinks.
+
+    Parameters:
+      path: A path with its home directory already expanded.
+    Returns:
+      The normalized absolute path, for refusal messages.
+    """
+    return Path(os.path.abspath(path))
 
 
 def _same_directory(left: Path, right: Path) -> bool:
@@ -238,7 +329,8 @@ def resolve_input(path: str) -> Path:
     Returns:
       The resolved path, when policy permits it.
     """
-    return _check(Path(path).expanduser().resolve())
+    expanded = Path(path).expanduser()
+    return _check(expanded.resolve(), _as_requested(expanded))
 
 
 def resolve_output(path: str, beside: Path, copy_policy: OutputPolicy | None = None) -> Path:
@@ -260,7 +352,7 @@ def resolve_output(path: str, beside: Path, copy_policy: OutputPolicy | None = N
     if raw_path.name.startswith("."):
         raise PathNotAllowed("output filenames must not begin with a dot")
     destination = raw_path.parent.resolve() / raw_path.name
-    resolved = _check(destination)
+    resolved = _check(destination, _as_requested(raw_path))
 
     if copy_policy is None:
         try:

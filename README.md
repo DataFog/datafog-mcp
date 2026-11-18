@@ -116,6 +116,7 @@ Known issue: an email address directly touching a non-ASCII letter, as in unspac
 - [Detection and copy behavior](docs/detection.md)
 - [Supported formats and limits](docs/file-formats.md)
 - [Allowed roots and owner policy](docs/policy.md)
+- [Python interface](docs/python-api.md)
 - [Privacy and security boundaries](docs/privacy.md)
 - [Uninstall](docs/uninstall.md)
 - [Development and local checks](docs/development.md)

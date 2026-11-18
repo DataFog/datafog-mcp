@@ -12,6 +12,7 @@ import pytest
 
 from datafog_mcp import policy
 from datafog_mcp.paths import ALLOWED_ROOTS_VAR
+from datafog_mcp.vault import VAULT_DIR_VAR
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -35,6 +36,9 @@ def allow_test_paths(
     """
     roots = os.pathsep.join([str(tmp_path_factory.getbasetemp().resolve()), str(REPO_ROOT)])
     monkeypatch.setenv(ALLOWED_ROOTS_VAR, roots)
+    # A vault location in the developer's own environment must not leak into
+    # tests; the vault tests set their own.
+    monkeypatch.delenv(VAULT_DIR_VAR, raising=False)
     monkeypatch.setattr(policy, "POLICY_FILE", tmp_path_factory.getbasetemp() / "policy.toml")
 
 

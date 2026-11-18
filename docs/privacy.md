@@ -13,6 +13,7 @@ What responses do carry:
 - **Paths.** Every response names the files it read and wrote, and errors name the path they refused. A filename like `jane_doe_lab_results.csv` identifies a person on its own.
 - **Metadata.** Entity types, per-type counts, and character offsets, plus numeric record/column locations for tables. These reveal that a file holds, say, two email addresses at known positions, without revealing addresses, cell values, or header text.
 - **Allowed roots.** A refused path returns the configured roots, which name directories on your machine.
+- **Whether a vault is configured.** `datafog_policy` says yes or no. The vault's location is never returned. A refusal never shows the location a path resolves to inside the vault, and a guessed path inside the vault is answered like any other refused path.
 
 For vulnerability reporting, see [SECURITY.md](../SECURITY.md).
 

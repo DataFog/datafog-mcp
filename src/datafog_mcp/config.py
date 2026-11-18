@@ -73,9 +73,11 @@ class ScanConfig:
         """
         if not self.entities:
             raise ValueError("entities must not be empty")
-        unsupported = sorted(set(self.entities) - SUPPORTED_ENTITIES)
-        if unsupported:
-            raise ValueError(f"unsupported entity types: {', '.join(unsupported)}")
+        if not set(self.entities) <= SUPPORTED_ENTITIES:
+            # The allowed values only: a rejected name is caller-supplied
+            # text and is not repeated.
+            allowed = ", ".join(sorted(SUPPORTED_ENTITIES))
+            raise ValueError(f"unsupported entity type; each must be one of: {allowed}")
         if self.max_bytes <= 0:
             raise ValueError("max_bytes must be positive")
 

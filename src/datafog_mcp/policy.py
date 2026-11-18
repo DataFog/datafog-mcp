@@ -48,12 +48,78 @@ class OutputPolicyError(ValueError):
     """An unusable policy; its message never includes policy values."""
 
 
+class _ExactValues(frozenset[str]):
+    """
+    Approved values for one entity type, printed as a count only.
+
+    copy() and the set operators and methods return this type too, so a
+    derived set does not start printing its values. Iterating the set, or
+    converting it with list, sorted, set, frozenset or tuple, gives the plain
+    values, as does an operator whose left operand is a plain set.
+    """
+
+    def __repr__(self) -> str:
+        return f"<{len(self)} exact values>"
+
+    __str__ = __repr__
+
+
+def _keep_hidden(name: str) -> None:
+    """
+    Make one frozenset method of _ExactValues return _ExactValues.
+
+    Installed at import rather than written as overrides: the signatures stay
+    the ones frozenset declares, which type checkers already know.
+
+    Parameters:
+      name: A frozenset method that returns a new set.
+    """
+    inherited = getattr(frozenset, name)
+
+    def method(self: _ExactValues, *others: object) -> object:
+        result = inherited(self, *others)
+        # NotImplemented passes through, so Python can try the other operand.
+        return _ExactValues(result) if isinstance(result, frozenset) else result
+
+    method.__name__ = name
+    method.__qualname__ = f"_ExactValues.{name}"
+    setattr(_ExactValues, name, method)
+
+
+for _name in (
+    "copy",
+    "union",
+    "intersection",
+    "difference",
+    "symmetric_difference",
+    "__or__",
+    "__and__",
+    "__sub__",
+    "__xor__",
+    "__ror__",
+    "__rand__",
+    "__rsub__",
+    "__rxor__",
+):
+    _keep_hidden(_name)
+del _name
+
+
 @dataclass(frozen=True)
-class OutputPolicy:
-    """Immutable owner settings, including the fixed copy destination."""
+class Policy:
+    """
+    Immutable owner settings, including the fixed copy destination.
+
+    Approved allowlist values are held only so is_allowlisted can match them.
+    They are left out of repr() and str(), and the supported ways to consult
+    them are is_allowlisted, which answers yes or no, and allowlist_counts.
+    allow_exact itself holds the values in memory: never serialize or log it.
+    """
 
     directory: Path | None = None
-    allow_exact: Mapping[str, frozenset[str]] = field(default_factory=lambda: MappingProxyType({}))
+    allow_exact: Mapping[str, frozenset[str]] = field(
+        default_factory=lambda: MappingProxyType({}), repr=False
+    )
     scope_folders: tuple[Path, ...] = ()
     scope_extensions: tuple[str, ...] = ()
     on_findings: Action = "ask"
@@ -65,13 +131,18 @@ class OutputPolicy:
             self,
             "allow_exact",
             MappingProxyType(
-                {kind: frozenset(values) for kind, values in self.allow_exact.items()}
+                {kind: _ExactValues(values) for kind, values in self.allow_exact.items()}
             ),
         )
 
     def is_allowlisted(self, entity_type: str, value: str) -> bool:
         """Match an owner-approved value exactly and only for its entity type."""
         return value in self.allow_exact.get(entity_type, frozenset())
+
+    @property
+    def allowlist_counts(self) -> dict[str, int]:
+        """How many values are approved per entity type, without the values."""
+        return {kind: len(values) for kind, values in self.allow_exact.items()}
 
     @property
     def available_scope_folders(self) -> tuple[Path, ...]:
@@ -98,6 +169,11 @@ class OutputPolicy:
         return folder_match and extension_match
 
 
+# The names this class and its loader had before the public interface was
+# named. Existing code and tests use them; new code should use Policy.
+OutputPolicy = Policy
+
+
 def _table(value: object, keys: set[str]) -> dict[str, object]:
     if not isinstance(value, dict) or set(value) - keys:
         raise OutputPolicyError("policy contains an unknown setting or invalid table")
@@ -110,6 +186,31 @@ def _strings(value: object) -> tuple[str, ...]:
     ):
         raise OutputPolicyError("policy lists must contain nonempty strings")
     return tuple(cast(list[str], value))
+
+
+def _refuse_vault(resolved: Path, message: str) -> None:
+    """
+    Reject a policy path that is the application vault or lies inside it.
+
+    The tools report the copy destination and the scope folders, and refuse
+    every path inside the vault. A policy naming the vault would let those two
+    answers be put together into the vault's location, so it is unusable. The
+    comparison is the one the path checks make, after symlink resolution.
+
+    Parameters:
+      resolved: An already-resolved policy path.
+      message: The refusal to raise; it names neither the path nor the vault.
+    """
+    # Import here: the path access layer also loads this policy for writes.
+    from .paths import PathNotAllowed, _in_vault
+
+    try:
+        inside = _in_vault(resolved)
+    except PathNotAllowed as exc:
+        # An unusable vault setting; its message names the variable only.
+        raise OutputPolicyError(str(exc)) from None
+    if inside:
+        raise OutputPolicyError(message)
 
 
 def _scope_paths(value: object) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
@@ -137,6 +238,7 @@ def _scope_paths(value: object) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
             raise OutputPolicyError("scanning scope folder cannot be resolved") from None
         if any(part.casefold() in DENIED_DIR_NAMES for part in folder.parts):
             raise OutputPolicyError("scanning scope folder is in a refused credential directory")
+        _refuse_vault(folder, "scanning scope folder is inside the application vault directory")
         if not any(folder == root or root in folder.parents for root in roots):
             raise OutputPolicyError("scanning scope folder is outside allowed roots")
         try:
@@ -150,10 +252,10 @@ def _scope_paths(value: object) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
     return tuple(folders), tuple(missing)
 
 
-def load_output_policy() -> OutputPolicy:
+def load_policy() -> Policy:
     """Load a strict version-1 policy; only an absent file uses the default."""
     if not os.path.lexists(POLICY_FILE):
-        return OutputPolicy()
+        return Policy()
     if not POLICY_FILE.is_file():
         raise OutputPolicyError("output policy is not a regular file")
     try:
@@ -180,6 +282,7 @@ def load_output_policy() -> OutputPolicy:
                 raise OutputPolicyError("output directory must already exist and be a directory")
         except (OSError, RuntimeError):
             raise OutputPolicyError("output directory cannot be resolved") from None
+        _refuse_vault(directory, "output directory is inside the application vault directory")
     allow = _table(data.get("allow", {}), {"exact"})
     exact = _table(allow.get("exact", {}), set(SUPPORTED_ENTITIES))
     allow_exact = {kind: frozenset(_strings(values)) for kind, values in exact.items()}
@@ -195,7 +298,7 @@ def load_output_policy() -> OutputPolicy:
         raise OutputPolicyError("workflow action must be ask, transform, or stop")
     if strategy not in ("redact", "mask", "remove"):
         raise OutputPolicyError("workflow transformation must be redact, mask, or remove")
-    return OutputPolicy(
+    return Policy(
         directory,
         allow_exact,
         folders,
@@ -204,3 +307,6 @@ def load_output_policy() -> OutputPolicy:
         strategy,
         missing_folders,
     )
+
+
+load_output_policy = load_policy

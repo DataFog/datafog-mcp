@@ -36,15 +36,25 @@ def test_empty_entities_are_rejected() -> None:
         ScanConfig(entities=())
 
 
-def test_unsupported_entities_are_named() -> None:
+def test_unsupported_entities_are_refused_without_repeating_them() -> None:
     """
-    Unsupported types fail at construction, and the message lists them.
+    Unsupported types fail at construction, and the message lists what is allowed.
 
     Previously an unsupported type returned zero findings and reported
     success, so a caller could not tell "no PII" from "cannot detect."
+    The rejected names are caller-supplied text, which could be anything, so
+    the message holds the allowed values only.
     """
-    with pytest.raises(ValueError, match="PERSON, SECRET"):
-        ScanConfig(entities=("EMAIL", "SECRET", "PERSON"))
+    with pytest.raises(ValueError) as refused:
+        ScanConfig(entities=("EMAIL", "SECRET", "PERSON", "avery@example.com"))
+
+    message = str(refused.value)
+    assert message == (
+        "unsupported entity type; each must be one of: " + ", ".join(sorted(SUPPORTED_ENTITIES))
+    )
+    for rejected in ("SECRET", "PERSON", "avery", "example.com"):
+        assert rejected not in message
+        assert rejected not in repr(refused.value)
 
 
 @pytest.mark.parametrize("entity", ["PERSON", "UUID", "DE_IBAN"])
