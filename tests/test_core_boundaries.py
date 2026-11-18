@@ -4,7 +4,8 @@ Values datafog-core 1.5.0 and 1.6.0 missed, through the real MCP tools.
 Those two releases dropped an email address directly after closing
 punctuation or dots, and a phone number directly after a digit and a comma or
 at the end of a line whose successor starts with a digit. Core 1.7.0 finds
-them again, and the server accepts 1.7.x only. Every input here is asserted
+them again. Core 1.8 retains these fixes, and the server accepts 1.8.x only.
+Every input here is asserted
 exactly: the count, the reported span, and the complete copy each write tool
 produces, so a core release that misses one of them again fails here.
 
@@ -303,8 +304,8 @@ def test_installed_core_is_the_one_minor_the_server_accepts() -> None:
     floor, cap = specifiers[">="], specifiers["<"]
     major, minor = floor.release[:2]
     assert cap.release == (major, minor + 1), "the cap must be the next minor"
-    # This module pins what the 1.7 line finds; a new line needs a new review.
-    assert (major, minor) == (1, 7)
+    # Core 1.8 was reviewed against these previously fixed boundary cases.
+    assert (major, minor) == (1, 8)
 
     installed = Version(version("datafog-core"))
     assert installed.release[:2] == (major, minor), installed
@@ -314,25 +315,25 @@ def test_installed_core_is_the_one_minor_the_server_accepts() -> None:
 @pytest.mark.parametrize(
     ("candidate", "accepted"),
     [
-        ("1.7.0", True),
-        ("1.7.1", True),
-        ("1.7.12", True),
-        ("1.7.1rc1", True),
-        ("1.7.1.dev3", True),
-        ("1.7.0.post1", True),
-        ("1.7.2+local.1", True),
-        ("1.7.0rc1", False),
-        ("1.6.9", False),
-        ("1.8.0", False),
-        ("1.8.0.dev1", False),
+        ("1.8.0", True),
+        ("1.8.1", True),
+        ("1.8.12", True),
+        ("1.8.1rc1", True),
+        ("1.8.1.dev3", True),
+        ("1.8.0.post1", True),
+        ("1.8.2+local.1", True),
         ("1.8.0rc1", False),
+        ("1.7.9", False),
+        ("1.9.0", False),
+        ("1.9.0.dev1", False),
+        ("1.9.0rc1", False),
         ("2.0.0", False),
     ],
 )
-def test_declared_range_admits_the_whole_1_7_line_and_nothing_else(
+def test_declared_range_admits_the_whole_1_8_line_and_nothing_else(
     candidate: str, accepted: bool
 ) -> None:
-    """Patch, pre-, post- and development releases of 1.7 above the floor are in range."""
+    """Patch, pre-, post- and development releases of 1.8 above the floor are in range."""
     specifier = declared_core_requirement().specifier
 
     assert specifier.contains(Version(candidate), prereleases=True) is accepted
