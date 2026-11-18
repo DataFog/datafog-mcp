@@ -27,8 +27,29 @@ Some types are narrower than their names suggest:
 - **`CREDENTIAL_URI`** covers PostgreSQL connection strings that include a password (`postgres://` or `postgresql://`). Other schemes, such as MySQL, Redis, or MongoDB, are not detected.
 - **`PRIVATE_KEY`** is a complete PEM private-key block. Public keys and certificates are not reported.
 
+An email address is replaced on its own; text joined to its front is not part of it. In plain text and CSV/TSV cells, `user=alice&pass=hunter2&email=alice@example.com` redacts to `user=alice&pass=hunter2&email=[EMAIL]`, and `1|Alice|Smith|alice@example.com` redacts to `1|Alice|Smith|[EMAIL]`. Version 1.0.0 wrote `[EMAIL]` for each of these. A password, token, or name before an address in a query string, URL, or delimited record therefore stays in the copy unless its own detector matches it. A JWT directly after `=`, as in `?id_token=<JWT>&email=alice@example.com`, is not detected and stays in clear. ENV and SQL formats keep their own boundaries: in an ENV file, `URL=user=alice&pass=hunter2&email=alice@example.com` still redacts to `URL=[EMAIL]`.
+
+In every format, a local part that begins with a value shaped like another entity type and a separator is split there: the address is reported from after the separator. The shapes are a ZIP code, an SSN, a credit card number, a phone number, an IP address, and a date; the separators are `.`, `-`, `_`, `+`, `'`, `#`, `/`, `=`, `?`, `|`, and `&`, except that a five-digit number followed by `-` stays in the address. The value in front is replaced only when its type is selected. `123-45-6789.alice@example.com` redacts to `[SSN].[EMAIL]` by default, while `2025550143.alice@example.com` redacts to `2025550143.[EMAIL]`, `192.0.2.1-alice@example.com` to `192.0.2.1-[EMAIL]`, and `2026-10-01_alice@example.com` to `2026-10-01_[EMAIL]`, because `PHONE`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE` are off by default. Other digit runs, such as `1234.alice@example.com` or `20261001.alice@example.com`, and all-digit local parts such as `2025550143@example.com`, are one address.
+
 When two detections of different types partly overlap and neither contains the other, replacing either one would leave part of the other value in the copy. Scans and writes refuse such a file with an error naming the entity types involved; nothing is written. Run the tool again with a narrower `entity_types` selection. One detection wholly inside another, such as the address-shaped part of a connection string, is resolved normally. A future release may instead replace the whole overlapping span with a single marker rather than refuse the file; until then the refusal is the intended behavior.
 
 Credential detection is not a substitute for a dedicated secret scanner. A clean result means none of the selected detectors matched; it is not proof a file holds no sensitive data or secrets.
+
+## Known issue: email addresses touching non-ASCII letters
+
+A non-ASCII letter directly touching an email address is treated as part of the address. This is tracked as [datafog-core#272](https://github.com/DataFog/datafog-core/issues/272) and applies in every format.
+
+- **Affected:** letters such as `é`, `à`, `ü`, `и`, `和`, `と`, and `와`, and combining accents.
+- **Not affected:** punctuation and spacing such as `、`, `。`, `：`, `（`, a no-break space, or a zero-width space, and emoji. Two addresses separated by one of these are each found.
+
+What this means for copies and scans:
+
+- Two addresses joined by such a letter are reported as one match, and the second address's domain stays in the copy: `alice@example.comとbob@example.net` redacts to `[EMAIL]@example.net`. Version 1.0.0 redacted both.
+- Text written without spaces around an address can be replaced whole: `メールはalice@example.comです` redacts to `[EMAIL]`. Another value inside that text is then not reported under its own type: `SSNは123-45-6789でメールはalice@example.comです` redacts to `[EMAIL]` and the scan reports one `EMAIL` and no `SSN`.
+- A card number written with spaces, followed by such text and an address, is refused with the partial-overlap error described above: `カードは4111 1111 1111 1111でメールはalice@example.comです`.
+
+The same matching is what finds addresses that contain non-ASCII letters, which version 1.0.0 missed: `josé@example.com`, `名前@example.com`, and `alice@bücher.example` are each reported and redacted.
+
+Until this is fixed in Core, check copies of text in which addresses touch non-ASCII letters. Where you control the input, a space or punctuation mark between values avoids it.
 
 [Back to the README](../README.md)
