@@ -107,6 +107,8 @@ File contents are processed locally. The running server makes no network request
 
 Responses do include paths and metadata, which enter the agent's context and may reach its model provider. Allowed roots restrict **DataFog's** access; they do not restrict other agent tools. Routine scope and workflow settings are advisory. Detection can miss values, and approved allowlist values remain in copies.
 
+Known issue: an email address directly touching a non-ASCII letter, as in unspaced Japanese or Chinese text, can be matched too widely, which can leave part of a second address in a copy. [Details →](docs/detection.md#known-issue-email-addresses-touching-non-ascii-letters)
+
 [Privacy boundaries →](docs/privacy.md) · [Configure roots, scope, allowlists, and output folders →](docs/policy.md)
 
 ## Documentation and contributing

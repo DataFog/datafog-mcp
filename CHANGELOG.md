@@ -30,6 +30,15 @@ Notable changes to datafog-mcp. The format follows [Keep a Changelog](https://ke
 
 - Locked runtime dependencies updated past published advisories: authlib 1.9.3, certifi 2026.10.23, dnspython 2.9.2 (Python 3.11 and later), fastmcp 3.4.11, joserfc 1.7.7 (Python 3.10) and 1.8.0, and opentelemetry-api 1.45.2. dnspython 2.9.2 is past CVE-2026-128089 (excessive memory and CPU use when parsing a crafted WKS record from zone-file text). Python 3.10 stays on dnspython 2.8.0, the newest release that supports it; this server does not parse zone files.
 
+### Known issues
+
+- A non-ASCII letter directly touching an email address is treated as part of the address ([datafog-core#272](https://github.com/DataFog/datafog-core/issues/272)). This affects letters such as `é`, `à`, `ü`, `и`, `和`, `と`, and `와`, and combining accents. It does not affect punctuation and spacing such as `、`, `。`, `：`, `（`, a no-break space, or a zero-width space, nor emoji. The consequences, in every format:
+  - When two addresses are joined by such a letter, one match is reported and the second address's domain stays in the copy: `alice@example.comとbob@example.net` redacts to `[EMAIL]@example.net`. Version 1.0.0 redacted both, to `[EMAIL]と[EMAIL]`.
+  - Text written without spaces around an address can be replaced whole, and another value inside it is then not reported under its own type: `SSNは123-45-6789でメールはalice@example.comです` redacts to `[EMAIL]`, with one `EMAIL` and no `SSN` reported. The SSN is removed from the copy, but the scan does not count it. Version 1.0.0 wrote `SSNは[SSN]でメールは[EMAIL]です`.
+  - A card number written with spaces, followed by such text and an address, makes scans and writes refuse the file with the partial-overlap error: `カードは4111 1111 1111 1111でメールはalice@example.comです` is refused, naming `CREDIT_CARD` and `EMAIL`.
+
+  The same change is why addresses with non-ASCII letters are now found at all: `josé@example.com`, `名前@example.com`, and `alice@bücher.example` are each reported and redacted, where 1.0.0 missed them. Until the Core fix, check copies of text in which addresses touch non-ASCII letters, and separate values with a space or punctuation where you control the input.
+
 ## [1.0.0] - 2026-10-12
 
 First release: an MCP server that checks a file for personal data and credentials, and writes a cleaned copy, without file contents or matched values ever appearing in a tool response.

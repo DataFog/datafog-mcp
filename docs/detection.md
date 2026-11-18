@@ -35,4 +35,21 @@ When two detections of different types partly overlap and neither contains the o
 
 Credential detection is not a substitute for a dedicated secret scanner. A clean result means none of the selected detectors matched; it is not proof a file holds no sensitive data or secrets.
 
+## Known issue: email addresses touching non-ASCII letters
+
+A non-ASCII letter directly touching an email address is treated as part of the address. This is tracked as [datafog-core#272](https://github.com/DataFog/datafog-core/issues/272) and applies in every format.
+
+- **Affected:** letters such as `é`, `à`, `ü`, `и`, `和`, `と`, and `와`, and combining accents.
+- **Not affected:** punctuation and spacing such as `、`, `。`, `：`, `（`, a no-break space, or a zero-width space, and emoji. Two addresses separated by one of these are each found.
+
+What this means for copies and scans:
+
+- Two addresses joined by such a letter are reported as one match, and the second address's domain stays in the copy: `alice@example.comとbob@example.net` redacts to `[EMAIL]@example.net`. Version 1.0.0 redacted both.
+- Text written without spaces around an address can be replaced whole: `メールはalice@example.comです` redacts to `[EMAIL]`. Another value inside that text is then not reported under its own type: `SSNは123-45-6789でメールはalice@example.comです` redacts to `[EMAIL]` and the scan reports one `EMAIL` and no `SSN`.
+- A card number written with spaces, followed by such text and an address, is refused with the partial-overlap error described above: `カードは4111 1111 1111 1111でメールはalice@example.comです`.
+
+The same matching is what finds addresses that contain non-ASCII letters, which version 1.0.0 missed: `josé@example.com`, `名前@example.com`, and `alice@bücher.example` are each reported and redacted.
+
+Until this is fixed in Core, check copies of text in which addresses touch non-ASCII letters. Where you control the input, a space or punctuation mark between values avoids it.
+
 [Back to the README](../README.md)
