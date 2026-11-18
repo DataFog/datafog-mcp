@@ -29,6 +29,8 @@ DataFog MCP lets an AI agent detect personal data and credentials in local files
 
 Requires **Python 3.10+** and [uv](https://docs.astral.sh/uv/).
 
+On an Intel Mac, also install a [Rust toolchain](https://rustup.rs/) first: datafog-core 1.7 has no prebuilt package for Intel Macs, so the install builds it from source. Apple Silicon, Linux, and Windows install prebuilt packages.
+
 **1. Install DataFog MCP.**
 
 ```bash
