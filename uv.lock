@@ -21,7 +21,7 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "caio", version = "0.9.25", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "caio", version = "0.9.25", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/41/6d/e03ef9694346a55da965538f3e28461bd9fc71e21f997269d03b3cfc8755/aiofile-3.8.8.tar.gz", hash = "sha256:41f3dc40bd730459d58610476e82e5efb2f84ae6e9fa088a9545385d838b8a43", size = 19456, upload-time = "2023-08-22T12:48:38.88Z" }
 wheels = [
@@ -41,7 +41,7 @@ resolution-markers = [
     "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "caio", version = "0.12.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "caio", version = "0.12.9", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/14/31/edb06aabd8f8f0b56d659f30800795f40b93cba96be946ce179f6931e3a5/aiofile-3.12.3.tar.gz", hash = "sha256:caa6aa746b5e47e2165f7abd741b6415e49cf4d44fddc0f61844612cc3924d41", size = 21600, upload-time = "2026-08-04T22:59:27.171Z" }
 wheels = [
@@ -621,12 +621,12 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "attrs", marker = "python_full_version < '3.11'" },
-    { name = "docstring-parser", marker = "python_full_version < '3.11'" },
-    { name = "rich", marker = "python_full_version < '3.11'" },
-    { name = "rich-rst", marker = "python_full_version < '3.11'" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "attrs" },
+    { name = "docstring-parser" },
+    { name = "rich" },
+    { name = "rich-rst" },
+    { name = "tomli" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c1/08/a444f3cca86cb27bc256831fc8c42b578390f4087bf6631cccb5334bd9ed/cyclopts-4.25.3.tar.gz", hash = "sha256:7d3a067bc7699a1a65fe2ea0b092a925855bb711a05adc1e65c5b9ba307acea4", size = 202814, upload-time = "2026-09-17T16:25:16.892Z" }
 wheels = [
@@ -646,10 +646,10 @@ resolution-markers = [
     "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "attrs", marker = "python_full_version >= '3.11'" },
-    { name = "docstring-parser", marker = "python_full_version >= '3.11'" },
-    { name = "rich", marker = "python_full_version >= '3.11'" },
-    { name = "rich-rst", marker = "python_full_version >= '3.11'" },
+    { name = "attrs" },
+    { name = "docstring-parser" },
+    { name = "rich" },
+    { name = "rich-rst" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1b/61/efe6e31020ee4312318b702696dd7add1b0a15b205b04590f984972c3488/cyclopts-5.1.0.tar.gz", hash = "sha256:c51aa364e746285c24eaa5c3b425ead59cc8bdb71b98c11f0343baddcb0a9c80", size = 237747, upload-time = "2026-09-29T19:02:25.122Z" }
 wheels = [
@@ -658,24 +658,24 @@ wheels = [
 
 [[package]]
 name = "datafog-core"
-version = "1.7.0"
+version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/07/54/57750a47c88a2010d381728bc94c0de743413ff376564bd0ab3696ed57e9/datafog_core-1.7.0.tar.gz", hash = "sha256:9c2da90489379bde660a46ed00a83f4b84bd6dfb2f67012e4c6ad34d7be6a826", size = 1307668, upload-time = "2026-11-17T23:12:07.063Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1c/04/7631606eae069e8cddccfdc379f46fb147a5c8d57190f717ff591a99d1dc/datafog_core-1.8.0.tar.gz", hash = "sha256:9fead5e6acc27cb44c6babe170831d959732c0f63c5790882d8d2b62f477533e", size = 1310055, upload-time = "2026-11-18T17:49:50.081Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6e/a6/e32fdddcb731db1fd32736824def5814161d924b08bec2721649911c56b6/datafog_core-1.7.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:ba8c3fc0817fecc7cb153dea7b219dc4bcff10696195c063d88917621f31a8fc", size = 3330789, upload-time = "2026-11-17T23:11:52.352Z" },
-    { url = "https://files.pythonhosted.org/packages/95/1f/41054796264e4f8be21d68e6e9e517e2d427b8740227debf7c6409a4f7ad/datafog_core-1.7.0-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:120a03ead7ff6e4ace07e3dfa8e1df26acd005b8109620d6c0e1f33965ae26ed", size = 3537496, upload-time = "2026-11-17T23:11:54.204Z" },
-    { url = "https://files.pythonhosted.org/packages/d9/75/2b11cc1c2da4c8a49f6c455c45bd81f7c5c20a77a257fd9d6b4ce0677407/datafog_core-1.7.0-cp310-abi3-manylinux_2_28_ppc64le.whl", hash = "sha256:8e6c4c65213ade346fff5205e50fbc5cf6999840d940278a04724a5080e5a51e", size = 3853162, upload-time = "2026-11-17T23:11:55.701Z" },
-    { url = "https://files.pythonhosted.org/packages/ef/44/bb9d06e09978f7afb3aefedc0c7442be6504eac6abbcd5f569a11674354b/datafog_core-1.7.0-cp310-abi3-manylinux_2_28_s390x.whl", hash = "sha256:e9ee3af94da34491cc5470ca21a77f5b97ba4f469be9204c3cbb4459d20aff57", size = 3605157, upload-time = "2026-11-17T23:11:57.405Z" },
-    { url = "https://files.pythonhosted.org/packages/1a/fc/e19847d583821aa49e275dcb8d9621c6a8678a0ecf813d2fd99621a95674/datafog_core-1.7.0-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:bae450c6360f9e942d72fedfa6645a9be92deafae276a2ba3ab0aa84027caa15", size = 3662234, upload-time = "2026-11-17T23:11:59.017Z" },
-    { url = "https://files.pythonhosted.org/packages/32/ad/374b89df2a434cd383b05f2e595deaf15792756daa41d974adbcd505912d/datafog_core-1.7.0-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:38fb663687906715b4fe89aee166e61c6729d038f0d8a55e51a28fff0e2eada0", size = 3686971, upload-time = "2026-11-17T23:12:00.695Z" },
-    { url = "https://files.pythonhosted.org/packages/57/68/b04886018d1e939a6284f63c841c87e11c786ba3c32f2acedb72b2b60060/datafog_core-1.7.0-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:e915d44c3f19f95d6cec0db29aa6507fb3e4b0ccae8d13a71b2e39d1650238ea", size = 3863131, upload-time = "2026-11-17T23:12:02.62Z" },
-    { url = "https://files.pythonhosted.org/packages/13/a5/ba816b976d6f1896ba3f517e0811a080df941bd9026eef74c0563573b773/datafog_core-1.7.0-cp310-abi3-win_amd64.whl", hash = "sha256:7e01fc6d4821a6435be22da926929a0da2b5b88403b541f471367da67702c73b", size = 3194446, upload-time = "2026-11-17T23:12:04.215Z" },
-    { url = "https://files.pythonhosted.org/packages/ef/b3/989a3998a62b6d436e06bbdce9be92f1058af0576d1cb2da392fb2bd5a5c/datafog_core-1.7.0-cp310-abi3-win_arm64.whl", hash = "sha256:fc308aa26456140c916860e2fa3c28b608edd1e98085ded51c5bbc0d07a45510", size = 3021145, upload-time = "2026-11-17T23:12:05.641Z" },
+    { url = "https://files.pythonhosted.org/packages/62/bf/41d030856a8b85973f3d0c576190623d25f5f7f51686e57bf7fa5d7f1ab4/datafog_core-1.8.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:062c112d59e29ef24c84207cda65d6a7de63821a0cdeccccece6e7c4211f9ed8", size = 3335812, upload-time = "2026-11-18T17:49:33.669Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/e9/c092eda6d88edc451e8ff67a00d53b2468aeae8fd9b06b13a9f5582f9657/datafog_core-1.8.0-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:171cd7c83df300d0f61e759245d7c8cebed6b1e9345cb3ad5a2732cdf85fcc13", size = 3540961, upload-time = "2026-11-18T17:49:35.896Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/7c/a07c7df1a87b4c7417ddcd289b5280a34777f16cf3c0abdc6281131de93f/datafog_core-1.8.0-cp310-abi3-manylinux_2_28_ppc64le.whl", hash = "sha256:693ac4e1e5f870c1c862844fe2213b4b25c263709f8d8ba08ba9d2c7659666ec", size = 3857694, upload-time = "2026-11-18T17:49:37.728Z" },
+    { url = "https://files.pythonhosted.org/packages/61/8b/402a8d2fedc0c5e716cd5bf3336234f1886790b6a81ac72e11c3058ea6c6/datafog_core-1.8.0-cp310-abi3-manylinux_2_28_s390x.whl", hash = "sha256:77a0d40d1553cde08ce66c308ac6f3016dcc21f4cbf39d32b7cf3c5b651a0ce9", size = 3611358, upload-time = "2026-11-18T17:49:39.663Z" },
+    { url = "https://files.pythonhosted.org/packages/97/e8/c526f95aeb4a68efd3a88e6b7f4200a13402b3b09f5d5e856c7c11eebc4a/datafog_core-1.8.0-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:361209f04d3c6a9928c45b3e17336923632413441af21e111643c39a9443c4c0", size = 3663808, upload-time = "2026-11-18T17:49:41.272Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/c8/ccb3bdbc0e2aa5fed58440754f98b4945e89d3eb6776229f6fb4bddb7341/datafog_core-1.8.0-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:b2ba4b8560b4e1415f90b71c59f6ea0f060cf575b64940d78a0936b0366998c6", size = 3691419, upload-time = "2026-11-18T17:49:42.949Z" },
+    { url = "https://files.pythonhosted.org/packages/01/e6/e15e94cc3ab044357c2823e75e48062515a07e62fe76d430fb84460eac6b/datafog_core-1.8.0-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:738d7fb8132e83e69b35c918b50327cae01c94019736001983d2d393347c9de9", size = 3857779, upload-time = "2026-11-18T17:49:44.998Z" },
+    { url = "https://files.pythonhosted.org/packages/70/b0/e5495f4d1004ba26e0025eb2eee5d1bf37f0762295c76babb90d086137bf/datafog_core-1.8.0-cp310-abi3-win_amd64.whl", hash = "sha256:132a3487d6d7ecaa8b9bcb0883934fcca05ab88b2b505201176004c0bde98457", size = 3193646, upload-time = "2026-11-18T17:49:46.606Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/07/493ba3a9e945838d443cd4a281e041217e8f73fce0976874c3defd2a0ce3/datafog_core-1.8.0-cp310-abi3-win_arm64.whl", hash = "sha256:beedb61f8c7a7207c2e11aa32a129325c4488bb6c1998e92e32006ebcdbc5a48", size = 3028208, upload-time = "2026-11-18T17:49:48.32Z" },
 ]
 
 [[package]]
 name = "datafog-mcp"
-version = "1.1.0"
+version = "1.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "datafog-core" },
@@ -708,7 +708,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "datafog-core", specifier = ">=1.7.0,<1.8" },
+    { name = "datafog-core", specifier = ">=1.8.0,<1.9" },
     { name = "fastmcp", specifier = ">=3,<4" },
     { name = "mcp", specifier = ">=1.2.0" },
     { name = "pydantic", specifier = ">=2,<3" },
@@ -965,7 +965,7 @@ name = "importlib-metadata"
 version = "9.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.14'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6f/7e/1e7e8dc30634b93ebb3d58a3dea569ad146e656218d3960ab04f62047b29/importlib_metadata-9.0.1.tar.gz", hash = "sha256:ab830580bc0ef3db61ce8fae716389e5462b67e033018bab6d8f80ef17172f99", size = 59124, upload-time = "2026-08-28T15:30:34.646Z" }
 wheels = [
@@ -1035,7 +1035,7 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "cryptography", marker = "python_full_version < '3.11'" },
+    { name = "cryptography" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/bd/15/48ff246732232d35ee234228def22b52455fcc55577f06146602399a29b0/joserfc-1.7.7.tar.gz", hash = "sha256:471d0fd12a5a0d1c0942de280f39efe6f597878315033270b504d4d006d25510", size = 237446, upload-time = "2026-10-19T00:30:29.974Z" }
 wheels = [
@@ -1055,7 +1055,7 @@ resolution-markers = [
     "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "cryptography", marker = "python_full_version >= '3.11'" },
+    { name = "cryptography" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/74/31/5c3f27e82c92a7bbe1f028033ff19e0251540395c9be244c01a50de42bdb/joserfc-1.8.0.tar.gz", hash = "sha256:cbf03cb2c6db8cc5289f1ef8718842e53dba244b4c0de5fefa0c0eaee4bde8db", size = 241023, upload-time = "2026-11-03T10:45:57.948Z" }
 wheels = [
@@ -2208,8 +2208,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

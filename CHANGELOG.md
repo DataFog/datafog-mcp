@@ -2,6 +2,13 @@
 
 Notable changes to datafog-mcp. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-11-18
+
+### Changed
+
+- Require datafog-core 1.8.x (`>=1.8.0,<1.9`). This fixes email matching in unspaced mixed-script text: `alice@example.comとbob@example.net` covers both addresses, and a Japanese sentence containing an SSN or card and an address reports each value under its own type. Accented and internationalized addresses retain their complete spans. The former known-issue expected failures are enforced regressions through all four MCP tools.
+- Tighter email boundaries keep neighboring text in transformed copies. A mixed-script local part such as `用户alice@example.com` is now reported from `alice`, mixed-script final labels can also narrow (`alice@example.coм` leaves the Cyrillic `м`), and invalid SSNs or phones can remain visible where an over-wide EMAIL previously swallowed them accidentally. Ambiguous joined mailboxes can still be covered as one span; the detectors do not provide linguistic word segmentation. Default entity selections and platform support are unchanged.
+
 ## [1.1.0] - 2026-11-17
 
 ### Added

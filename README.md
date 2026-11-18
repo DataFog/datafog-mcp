@@ -23,13 +23,13 @@
 
 DataFog MCP lets an AI agent detect personal data and credentials in local files, then create a copy with matched values redacted, masked, or removed. Detection runs on [DataFog Core](https://github.com/DataFog/datafog-core). Tool responses contain counts, locations, and copy paths—never file contents or matched values.
 
-**Stable v1.1.0.** Tested with Claude Code. CI runs on Linux; development uses macOS. Windows and other MCP clients have not been validated.
+**Stable v1.2.0.** Tested with Claude Code. CI runs on Linux; development uses macOS. Windows and other MCP clients have not been validated.
 
 ## Quickstart
 
 Requires **Python 3.10+** and [uv](https://docs.astral.sh/uv/).
 
-On an Intel Mac, also install a [Rust toolchain](https://rustup.rs/) first: datafog-core 1.7 has no prebuilt package for Intel Macs, so the install builds it from source. Apple Silicon, Linux, and Windows install prebuilt packages.
+On an Intel Mac, also install a [Rust toolchain](https://rustup.rs/) first: datafog-core 1.8 has no prebuilt package for Intel Macs, so the install builds it from source. Apple Silicon, Linux, and Windows install prebuilt packages.
 
 **1. Install DataFog MCP.**
 
@@ -107,7 +107,7 @@ File contents are processed locally. The running server makes no network request
 
 Responses do include paths and metadata, which enter the agent's context and may reach its model provider. Allowed roots restrict **DataFog's** access; they do not restrict other agent tools. Routine scope and workflow settings are advisory. Detection can miss values, and approved allowlist values remain in copies.
 
-Known issue: an email address directly touching a non-ASCII letter, as in unspaced Japanese or Chinese text, can be matched too widely, which can leave part of a second address in a copy. [Details →](docs/detection.md#known-issue-email-addresses-touching-non-ascii-letters)
+Core 1.8 fixes adjacent email addresses in unspaced Japanese and Chinese text. Mixed-script local parts and final domain labels can still be narrowed. [Boundaries and limits →](docs/detection.md#email-addresses-touching-non-ascii-letters)
 
 [Privacy boundaries →](docs/privacy.md) · [Configure roots, scope, allowlists, and output folders →](docs/policy.md)
 

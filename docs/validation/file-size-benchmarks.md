@@ -161,7 +161,7 @@ budget. Rerun the size/format/density matrix on the combined code before the
 
 ## Rerun on datafog-core 1.5.0
 
-The matrix above was rerun after the server moved to datafog-core 1.5.0, on the change that raised the requirement to 1.5.0 (with fastmcp 3.4.7, before the locked dependencies were updated to 3.4.11). The numbers predate the move to datafog-core 1.7.0, which the server now requires; they were not rerun on it. Since the original runs, CSV files take the cell path, the server passes its entity selection to Core (finding 3), and scan responses stop listing locations above 700 findings (finding 1).
+The matrix above was rerun after the server moved to datafog-core 1.5.0, on the change that raised the requirement to 1.5.0 (with fastmcp 3.4.7, before the locked dependencies were updated to 3.4.11). The numbers predate the move to datafog-core 1.8.0, which the server now requires; they were not rerun on it. Since the original runs, CSV files take the cell path, the server passes its entity selection to Core (finding 3), and scan responses stop listing locations above 700 findings (finding 1).
 
 **These numbers come from a different machine and are not comparable run for run with the tables above.** They were measured on a shared Linux aarch64 virtual machine with 4 CPUs and 3.9 GB of memory, no swap, Python 3.12.15, datafog-core 1.5.0. The original tables came from a 16-CPU x86_64 desktop. The virtual machine is noisy: other work on the host changes timings between runs. Use this section to check the budgets on current code and a small machine, not to measure a speedup or slowdown against the earlier hardware. The reference runner is still to be measured.
 
