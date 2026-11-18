@@ -49,12 +49,60 @@ class OutputPolicyError(ValueError):
 
 
 class _ExactValues(frozenset[str]):
-    """Approved values for one entity type, printed as a count only."""
+    """
+    Approved values for one entity type, printed as a count only.
+
+    copy() and the set operators and methods return this type too, so a
+    derived set does not start printing its values. Iterating the set, or
+    converting it with list, sorted, set, frozenset or tuple, gives the plain
+    values, as does an operator whose left operand is a plain set.
+    """
 
     def __repr__(self) -> str:
         return f"<{len(self)} exact values>"
 
     __str__ = __repr__
+
+
+def _keep_hidden(name: str) -> None:
+    """
+    Make one frozenset method of _ExactValues return _ExactValues.
+
+    Installed at import rather than written as overrides: the signatures stay
+    the ones frozenset declares, which type checkers already know.
+
+    Parameters:
+      name: A frozenset method that returns a new set.
+    """
+    inherited = getattr(frozenset, name)
+
+    def method(self: _ExactValues, *others: object) -> object:
+        result = inherited(self, *others)
+        # NotImplemented passes through, so Python can try the other operand.
+        return _ExactValues(result) if isinstance(result, frozenset) else result
+
+    method.__name__ = name
+    method.__qualname__ = f"_ExactValues.{name}"
+    setattr(_ExactValues, name, method)
+
+
+for _name in (
+    "copy",
+    "union",
+    "intersection",
+    "difference",
+    "symmetric_difference",
+    "__or__",
+    "__and__",
+    "__sub__",
+    "__xor__",
+    "__ror__",
+    "__rand__",
+    "__rsub__",
+    "__rxor__",
+):
+    _keep_hidden(_name)
+del _name
 
 
 @dataclass(frozen=True)

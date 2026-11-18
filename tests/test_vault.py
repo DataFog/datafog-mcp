@@ -751,7 +751,7 @@ def test_a_link_outside_the_roots_cannot_confirm_the_vault(
     root.mkdir()
     vault = tmp_path / VAULT_NAME
     other = tmp_path / "not-a-vault"
-    refusals = []
+    refusals: list[tuple[str, Path]] = []
     for name, directory in (("first", vault), ("second", other)):
         directory.mkdir()
         (directory / "entry.txt").write_text(f"token-1 = {ENTRY}\n", encoding="utf-8")

@@ -9,8 +9,11 @@ an approved allowlist value or a matched value.
 from __future__ import annotations
 
 import asyncio
+import copy
+import dataclasses
 import json
 import os
+import pickle
 import subprocess
 import sys
 from pathlib import Path
@@ -149,6 +152,86 @@ def test_earlier_names_still_work_from_their_modules() -> None:
 def test_no_public_name_writes_files() -> None:
     """The interface reads and scans; writing copies stays with the server."""
     assert not {"resolve_output", "write_text_file"} & set(dir(api))
+
+
+def test_sets_derived_from_an_allowlist_entry_still_print_counts_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """copy() and the set operators and methods keep the count-only type."""
+    configure(tmp_path, monkeypatch, f'[allow.exact]\nEMAIL = ["{APPROVED}", "second@example.com"]')
+    values = api.load_policy().allow_exact["EMAIL"]
+    extra = frozenset({"third@example.com"})
+
+    derived = {
+        "copy": values.copy(),
+        "shallow copy": copy.copy(values),
+        "deep copy": copy.deepcopy(values),
+        "union": values.union(extra),
+        "intersection": values.intersection(values),
+        "difference": values.difference(extra),
+        "symmetric_difference": values.symmetric_difference(extra),
+        "or": values | extra,
+        "and": values & values,
+        "sub": values - extra,
+        "xor": values ^ extra,
+        "reflected or": extra | values,
+        "reflected and": frozenset(values) & values,
+        "reflected sub": frozenset(values) - frozenset(),
+        "reflected xor": extra ^ values,
+        "or with nothing": values | frozenset(),
+    }
+
+    for how, result in derived.items():
+        if how == "reflected sub":
+            continue  # neither operand is the count-only type; shown for contrast
+        assert type(result) is type(values), how
+        assert isinstance(result, frozenset), how
+        for rendered in (repr(result), str(result), f"{result}", repr({"k": result})):
+            assert "example.com" not in rendered, how
+    assert derived["union"] == {APPROVED, "second@example.com", "third@example.com"}
+    assert derived["or with nothing"] == values
+    assert repr(derived["union"]) == "<3 exact values>"
+    assert APPROVED in values.copy()
+
+
+def test_the_documented_ways_to_reach_allowlist_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    docs/python-api.md says exactly which operations expose the values.
+
+    Serializing the policy as a whole fails rather than leak; converting or
+    iterating one entry gives the plain values, as the documentation warns.
+    """
+    configure(tmp_path, monkeypatch, f'[allow.exact]\nEMAIL = ["{APPROVED}"]')
+    current = api.load_policy()
+    values = current.allow_exact["EMAIL"]
+
+    # These raise instead of exposing anything, and the error holds no value.
+    for serialize in (dataclasses.asdict, copy.deepcopy, pickle.dumps):
+        with pytest.raises(TypeError) as refused:
+            serialize(current)
+        assert APPROVED not in str(refused.value)
+    with pytest.raises(TypeError) as refused:
+        json.dumps(vars(current))
+    assert APPROVED not in str(refused.value)
+    # vars() holds the same mapping; printing it still shows counts only.
+    assert APPROVED not in repr(vars(current))
+    assert vars(current)["allow_exact"]["EMAIL"] is values
+
+    # These give the plain values: never log or return what they produce.
+    for exposed in (
+        repr(list(values)),
+        repr(sorted(values)),
+        repr(set(values)),
+        repr(frozenset(values)),
+        repr(tuple(values)),
+        repr(set() | values),
+        ", ".join(values),
+        json.dumps(sorted(values)),
+        pickle.dumps(values).decode("latin-1"),
+    ):
+        assert APPROVED in exposed
 
 
 def test_policy_text_forms_never_show_allowlist_values(
