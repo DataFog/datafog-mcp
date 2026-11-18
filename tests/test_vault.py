@@ -571,6 +571,276 @@ def test_server_refuses_to_start_when_the_vault_covers_an_allowed_root(
         assert str(tmp_path) not in text
 
 
+def _requests_for_every_path_argument(inside: Path, outside: Path) -> dict[str, dict[str, Any]]:
+    """
+    Build one request per tool and path argument.
+
+    Parameters:
+      inside: A file under the allowed root.
+      outside: A path under no allowed root.
+
+    Returns:
+      Request arguments by an id of the form tool-argument-location.
+    """
+    requests: dict[str, dict[str, Any]] = {"datafog_policy-no-path": {}}
+    for tool in ["datafog_policy", *FILE_TOOLS]:
+        requests[f"{tool}-path-inside"] = {"path": str(inside)}
+        requests[f"{tool}-path-outside"] = {"path": str(outside)}
+    for tool in WRITE_TOOLS:
+        requests[f"{tool}-output-inside"] = {
+            "path": str(inside),
+            "output_path": str(inside.with_name("copy.txt")),
+        }
+        requests[f"{tool}-output-outside"] = {
+            "path": str(inside),
+            "output_path": str(outside.with_name("copy.txt")),
+        }
+    return requests
+
+
+REQUEST_IDS = sorted(_requests_for_every_path_argument(Path("/in/a"), Path("/out/b")))
+
+
+@pytest.mark.parametrize("request_id", REQUEST_IDS)
+@pytest.mark.parametrize("kind", COVERING)
+def test_no_tool_names_a_root_that_the_vault_covers(
+    kind: str, request_id: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Every tool and path argument gets the same content-free refusal.
+
+    The roots can change after startup, so the startup check is repeated on
+    each request. A refusal that listed the allowed roots, as the ordinary
+    outside-roots refusal does, would name a directory inside the vault.
+    """
+    _vault_covering_a_root(kind, tmp_path, monkeypatch)
+    inside = tmp_path / VAULT_NAME / "exports" / "input.txt"
+    inside.write_text("contact avery@example.com", encoding="utf-8")
+    outside = Path(tmp_path.anchor) / "etc" / "hostname"
+    arguments = _requests_for_every_path_argument(inside, outside)[request_id]
+    tool = request_id.split("-")[0]
+
+    with pytest.raises(ToolError) as refused:
+        call(tool, **arguments)
+
+    message = str(refused.value)
+    assert message == COVERED_ROOT
+    for hidden in (VAULT_NAME, str(tmp_path), "exports", "elsewhere", "shortcut", "outside"):
+        assert hidden not in message
+    assert sorted(item.name for item in inside.parent.iterdir()) == ["input.txt"]
+
+
+@pytest.mark.parametrize("kind", COVERING)
+def test_python_interface_names_no_root_that_the_vault_covers(
+    kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The public resolve and read functions refuse the same way."""
+    _vault_covering_a_root(kind, tmp_path, monkeypatch)
+    inside = tmp_path / VAULT_NAME / "exports" / "input.txt"
+    inside.write_text("contact avery@example.com", encoding="utf-8")
+    outside = Path(tmp_path.anchor) / "etc" / "hostname"
+
+    for path in (inside, outside):
+        with pytest.raises(api.RootPolicyError) as resolved:
+            api.resolve_input(str(path))
+        assert str(resolved.value) == COVERED_ROOT
+        with pytest.raises(api.RootPolicyError) as read:
+            api.read_text_file(str(path), api.DEFAULT_MAX_BYTES)
+        assert str(read.value) == COVERED_ROOT
+        with pytest.raises(paths.PolicyError) as written:
+            paths.resolve_output(str(path.with_name("copy.txt")), inside)
+        assert str(written.value) == COVERED_ROOT
+
+
+def test_roots_moved_inside_the_vault_after_startup_are_not_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    The reported case: the server started cleanly, then the roots changed.
+
+    The vault is apart from the root at startup. The roots file is then
+    edited to a directory inside the vault, and the next requests arrive.
+    """
+    vault = tmp_path / VAULT_NAME
+    inner = vault / "inner"
+    inner.mkdir(parents=True)
+    start = tmp_path / "allowed"
+    start.mkdir()
+    roots_file = tmp_path / "config" / "allowed_roots"
+    roots_file.parent.mkdir()
+    roots_file.write_text(f"{start}\n", encoding="utf-8")
+    monkeypatch.delenv("DATAFOG_MCP_ALLOWED_ROOTS")
+    monkeypatch.setattr(paths, "ROOTS_FILE", roots_file)
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+    started: list[bool] = []
+    monkeypatch.setattr(server.mcp, "run", lambda **_options: started.append(True))
+    server.run_server()
+    assert started == [True]
+    assert call("datafog_policy")["allowed_roots"] == [str(start)]
+
+    roots_file.write_text(f"{inner}\n", encoding="utf-8")
+
+    outside = str(Path(tmp_path.anchor) / "etc" / "hostname")
+    attempts: list[tuple[str, dict[str, Any]]] = [
+        ("datafog_policy", {}),
+        ("datafog_policy", {"path": outside}),
+        *((tool, {"path": outside}) for tool in FILE_TOOLS),
+        *((tool, {"path": str(inner / "input.txt")}) for tool in FILE_TOOLS),
+    ]
+    for tool, arguments in attempts:
+        with pytest.raises(ToolError) as refused:
+            call(tool, **arguments)
+        message = str(refused.value)
+        assert message == COVERED_ROOT, tool
+        assert VAULT_NAME not in message
+        assert "inner" not in message
+        assert str(tmp_path) not in message
+
+
+def _refusal(tool: str, **arguments: Any) -> str:
+    """Return the refusal a tool gives, as the caller sees it."""
+    with pytest.raises(ToolError) as refused:
+        call(tool, **arguments)
+    return str(refused.value)
+
+
+@pytest.mark.parametrize("tool", [*FILE_TOOLS, "datafog_policy"])
+@pytest.mark.parametrize("target", ["entry", "directory", "missing"])
+def test_a_guess_outside_the_roots_cannot_confirm_the_vault(
+    tool: str, target: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A path inside the vault and one beside it get the same refusal.
+
+    The vault is apart from every root. A caller who guesses its location
+    receives the ordinary outside-roots refusal, naming the path exactly as
+    they wrote it, so the answer is the one any wrong guess would get.
+    """
+    root = tmp_path / "allowed"
+    root.mkdir()
+    vault = tmp_path / VAULT_NAME
+    other = tmp_path / "not-a-vault"
+    for directory in (vault, other):
+        directory.mkdir()
+        (directory / "entry.txt").write_text(f"token-1 = {ENTRY}\n", encoding="utf-8")
+    monkeypatch.setenv("DATAFOG_MCP_ALLOWED_ROOTS", str(root))
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+    suffix = {"entry": "entry.txt", "directory": "", "missing": "absent/later.txt"}[target]
+
+    guessed = _refusal(tool, path=str(vault / suffix))
+    control = _refusal(tool, path=str(other / suffix))
+
+    assert "outside the allowed roots" in guessed
+    assert "vault" not in guessed.replace(VAULT_NAME, "")
+    assert guessed.replace(VAULT_NAME, "not-a-vault") == control
+    assert ENTRY not in guessed
+
+
+@pytest.mark.parametrize("tool", [*FILE_TOOLS, "datafog_policy"])
+@pytest.mark.parametrize("through", ["file-link", "directory-link"])
+def test_a_link_outside_the_roots_cannot_confirm_the_vault(
+    tool: str, through: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A link into the vault and a link beside it get the same refusal.
+
+    The refusal names the link as the caller wrote it and never the location
+    it resolves to, so it is the same text for both and shows neither target.
+    """
+    root = tmp_path / "allowed"
+    root.mkdir()
+    vault = tmp_path / VAULT_NAME
+    other = tmp_path / "not-a-vault"
+    refusals = []
+    for name, directory in (("first", vault), ("second", other)):
+        directory.mkdir()
+        (directory / "entry.txt").write_text(f"token-1 = {ENTRY}\n", encoding="utf-8")
+        if through == "file-link":
+            link = root / f"{name}.txt"
+            link.symlink_to(directory / "entry.txt")
+        else:
+            (root / name).symlink_to(directory, target_is_directory=True)
+            link = root / name / "entry.txt"
+        refusals.append((name, link))
+    monkeypatch.setenv("DATAFOG_MCP_ALLOWED_ROOTS", str(root))
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+
+    into_vault, beside = (_refusal(tool, path=str(link)) for _name, link in refusals)
+
+    assert "resolves to a location outside the allowed roots" in into_vault
+    assert into_vault.replace("first", "second") == beside
+    for message in (into_vault, beside):
+        assert VAULT_NAME not in message
+        assert "not-a-vault" not in message
+        assert "vault" not in message
+
+
+@pytest.mark.parametrize("tool", WRITE_TOOLS)
+def test_an_output_guess_outside_the_roots_cannot_confirm_the_vault(
+    tool: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An output_path inside the vault is refused like any other outside the roots."""
+    root = tmp_path / "allowed"
+    root.mkdir()
+    source = root / "input.txt"
+    source.write_text("contact avery@example.com", encoding="utf-8")
+    vault = tmp_path / VAULT_NAME
+    other = tmp_path / "not-a-vault"
+    vault.mkdir()
+    other.mkdir()
+    monkeypatch.setenv("DATAFOG_MCP_ALLOWED_ROOTS", str(root))
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+
+    guessed = _refusal(tool, path=str(source), output_path=str(vault / "copy.txt"))
+    control = _refusal(tool, path=str(source), output_path=str(other / "copy.txt"))
+
+    assert "outside the allowed roots" in guessed
+    assert guessed.replace(VAULT_NAME, "not-a-vault") == control
+    assert list(vault.iterdir()) == []
+    assert list(other.iterdir()) == []
+
+
+def test_python_interface_gives_a_vault_guess_the_ordinary_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """resolve_input and read_text_file answer a guess as the tools do."""
+    root = tmp_path / "allowed"
+    root.mkdir()
+    vault = tmp_path / VAULT_NAME
+    vault.mkdir()
+    monkeypatch.setenv("DATAFOG_MCP_ALLOWED_ROOTS", str(root))
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+    guess = vault / "entry.txt"
+    expected = f"{guess} is outside the allowed roots: {root}"
+
+    with pytest.raises(api.PathNotAllowed) as resolved:
+        api.resolve_input(str(guess))
+    with pytest.raises(api.PathNotAllowed) as read:
+        api.read_text_file(str(guess), api.DEFAULT_MAX_BYTES)
+
+    assert str(resolved.value) == expected
+    assert str(read.value) == expected
+    assert not isinstance(resolved.value, api.RootPolicyError)
+
+
+def test_a_vault_path_is_refused_when_no_roots_are_listed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With an empty roots policy a vault path is refused like every other path."""
+    vault = tmp_path / VAULT_NAME
+    vault.mkdir()
+    other = tmp_path / "not-a-vault"
+    other.mkdir()
+    monkeypatch.setenv("DATAFOG_MCP_ALLOWED_ROOTS", "")
+    monkeypatch.setenv(VAULT_DIR_VAR, str(vault))
+
+    guessed = _refusal("datafog_scan", path=str(vault / "entry.txt"))
+    control = _refusal("datafog_scan", path=str(other / "entry.txt"))
+
+    assert "lists no allowed roots" in guessed
+    assert guessed.replace(VAULT_NAME, "not-a-vault") == control
+
+
 @pytest.mark.parametrize("kind", ["inside-root", "outside-roots", "no-roots", "broken-roots"])
 def test_server_starts_when_the_vault_covers_no_allowed_root(
     kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

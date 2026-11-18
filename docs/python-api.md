@@ -58,7 +58,7 @@ A loaded policy is an immutable snapshot. Load one per request and pass it throu
 
 `RootPolicyError` is the `PathNotAllowed` raised when the roots configuration, or the vault setting, is itself unusable. It is not raised by `load_policy`; that raises `PolicyFileError`.
 
-`resolve_input` and `read_text_file` refuse every path inside the configured vault directory, after following symlinks, exactly as the server's tools do.
+`resolve_input` and `read_text_file` refuse every path inside the configured vault directory, after following symlinks, exactly as the server's tools do. They raise `RootPolicyError` for every path while the vault is an allowed root or contains one.
 
 ## Scanning
 
@@ -94,7 +94,7 @@ See [application vault location](policy.md#application-vault-location) for the r
 - **Matched values are not returned.** Results carry entity types, counts, and positions. `text` is the transformed input, so it still holds everything that was not detected; discard it if you only need to know what was found. Table header text is not returned.
 - **Approved allowlist values never appear in results, reprs, or errors, but the policy holds them.** `is_allowlisted` answers yes or no for a value you already hold, and `allowlist_counts` gives counts. The values do not appear in scan results, in `repr()` or `str()` of the policy or of its allowlist mapping, or in any error message. `Policy.allow_exact` does hold them in memory in order to match, and reading that attribute gives you the values. Do not serialize, log, or return `allow_exact` or its contents, for example through `dataclasses.asdict`, `vars`, JSON, or pickle.
 - **These errors are written to be shown:** `PolicyFileError`, `CsvError`, `OverlapConflict`, and `VaultConfigError`, and the `ValueError` that `process_text` raises for an unknown `input_format` or `strategy`. Their messages hold no file content, no allowlist value, no policy path, and no vault location.
-- **Path errors name paths.** `PathNotAllowed`, `RootPolicyError`, and `ReadError` messages include the path involved and the allowed roots, as the server's tool errors do. A filename can identify a person on its own. A path refused for being inside the vault is the exception: that message names no path.
+- **Path errors name paths.** `PathNotAllowed`, `RootPolicyError`, and `ReadError` messages include the path involved and the allowed roots, as the server's tool errors do. A filename can identify a person on its own. An outside-roots refusal names the path as it was requested, not the location a symlink leads to. Two messages name no path and no root: the refusal of a path that is inside both an allowed root and the vault, and the `RootPolicyError` raised while the vault covers an allowed root. A path inside the vault but outside the roots gets the ordinary outside-roots refusal.
 - **`vault_dir` returns the location** to your program. The MCP server reports only whether one is configured.
 - **Any other exception may quote the text.** An unexpected engine failure can carry input in its message. Report its type, as the server does, not its message.
 

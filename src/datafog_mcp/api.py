@@ -30,8 +30,10 @@ What this interface returns, and what it does not:
   input_format or strategy, which lists the allowed values only.
 - Path and read errors (PathNotAllowed, RootPolicyError, ReadError) name the
   path involved and the allowed roots, as the server's tool errors do. A
-  filename can identify a person on its own. The exception is a path inside
-  the vault, which is refused without naming it.
+  filename can identify a person on its own. An outside-roots refusal names
+  the path as requested, not where a symlink leads. A path inside both an
+  allowed root and the vault is refused without naming it, and while the
+  vault covers an allowed root every path is refused without naming a root.
 - vault_dir returns the configured location to the calling program. The MCP
   server reports only whether one is configured. resolve_input and
   read_text_file refuse every path inside the vault.
