@@ -36,7 +36,8 @@ SUPPORTED_ENTITIES: frozenset[str] = _text_scan_entities()
 
 # Which types are on by default is a product decision, so this stays
 # explicit rather than following the engine's list. DATE, ZIP_CODE, PHONE,
-# and IP_ADDRESS are supported but opt-in.
+# IP_ADDRESS, ACCOUNT_NUMBER, and STREET_ADDRESS are supported but opt-in,
+# although core 1.x enables all of them in its own default scan.
 DEFAULT_ENTITIES: tuple[str, ...] = (
     "API_KEY",
     "BEARER_TOKEN",

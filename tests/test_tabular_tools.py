@@ -234,12 +234,17 @@ def test_configured_table_copies_preserve_security_defaults_and_exact_disk_bytes
 
 @pytest.mark.parametrize("tool", TOOLS)
 @pytest.mark.parametrize("filename", [".env", "contacts.sql"])
+@pytest.mark.parametrize("label", ["customer=", "my.key="])
 def test_explicit_table_format_overrides_env_sql_filename(
-    tool: str, filename: str, tmp_path: Path
+    tool: str, filename: str, label: str, tmp_path: Path
 ) -> None:
     source = tmp_path / filename
-    address = "customer=tag@example.com"
-    text = f"email\n{address}\n"
+    # Core 1.4 trims a leading identifier= label from plain-text email spans,
+    # so the cell's address starts after the label and the label is kept.
+    # SQL boundaries would report the whole cell, and ENV boundaries the
+    # whole cell for the dotted key.
+    address = "tag@example.com"
+    text = f"email\n{label}{address}\n"
     source.write_text(text, encoding="utf-8")
     result = call(tool, source, input_format="csv")
     assert result["counts"] == {"EMAIL": 1}
@@ -248,8 +253,8 @@ def test_explicit_table_format_overrides_env_sql_filename(
         assert result["findings"] == [
             {
                 "type": "EMAIL",
-                "start": len("email\n"),
-                "end": len("email\n") + len(address),
+                "start": len("email\n") + len(label),
+                "end": len("email\n") + len(label) + len(address),
                 "record": 1,
                 "column": 1,
             }
@@ -261,7 +266,7 @@ def test_explicit_table_format_overrides_env_sql_filename(
             "datafog_remove": "",
         }[tool]
         output = Path(result["output_path"])
-        assert rows(output.read_text(encoding="utf-8"), ",") == [["email"], [replacement]]
+        assert rows(output.read_text(encoding="utf-8"), ",") == [["email"], [label + replacement]]
         assert source.read_text(encoding="utf-8") == text
 
 

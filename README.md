@@ -29,6 +29,8 @@ DataFog MCP lets an AI agent detect personal data and credentials in local files
 
 Requires **Python 3.10+** and [uv](https://docs.astral.sh/uv/).
 
+On an Intel Mac, also install a [Rust toolchain](https://rustup.rs/) first: datafog-core 1.7 has no prebuilt package for Intel Macs, so the install builds it from source. Apple Silicon, Linux, and Windows install prebuilt packages.
+
 **1. Install DataFog MCP.**
 
 ```bash
@@ -88,8 +90,8 @@ Scans return individual locations for up to **700 findings**. Above that, counts
 ### Detection coverage
 
 - **On by default:** email, SSN, credit card, labeled US routing numbers and NPIs, and supported credentials.
-- **Opt in:** phone, date, ZIP code, and IP address.
-- **Not detected:** plain-text names and street addresses.
+- **Opt in:** phone, date, ZIP code, IP address, and labeled account numbers and street addresses.
+- **Not detected:** plain-text names and unlabeled street addresses.
 
 Credential coverage includes GitHub and Stripe keys, bearer tokens, JWTs, password-bearing PostgreSQL URIs, and PEM private keys. Coverage varies by type; this is not a replacement for a dedicated secret scanner. [Detection and copy behavior →](docs/detection.md)
 
@@ -104,6 +106,8 @@ CSV/TSV headers are preserved and not scanned by default. Use `has_header=false`
 File contents are processed locally. The running server makes no network requests, and neither successful nor failed tool responses include file contents or matched values. Installation downloads packages separately.
 
 Responses do include paths and metadata, which enter the agent's context and may reach its model provider. Allowed roots restrict **DataFog's** access; they do not restrict other agent tools. Routine scope and workflow settings are advisory. Detection can miss values, and approved allowlist values remain in copies.
+
+Known issue: an email address directly touching a non-ASCII letter, as in unspaced Japanese or Chinese text, can be matched too widely, which can leave part of a second address in a copy. [Details →](docs/detection.md#known-issue-email-addresses-touching-non-ascii-letters)
 
 [Privacy boundaries →](docs/privacy.md) · [Configure roots, scope, allowlists, and output folders →](docs/policy.md)
 

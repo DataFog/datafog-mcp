@@ -139,8 +139,10 @@ def test_duplicate_requested_types_keep_existing_behavior(
 @pytest.mark.parametrize("tool", TOOLS)
 @pytest.mark.parametrize("extension", ["csv", "tsv"])
 def test_table_suffix_overrides_env_prefix(tool: str, extension: str, tmp_path: Path) -> None:
-    address = "customer=tag@example.com"
-    body = f"email\n{address}\n"
+    # Core 1.4 trims a leading identifier= label from plain-text email spans,
+    # so the cell's address starts after "customer=" and the label is kept.
+    address = "tag@example.com"
+    body = f"email\ncustomer={address}\n"
     source = tmp_path / f".env.{extension}"
     source.write_text(body)
     result = call(tool, source, entity_types=["EMAIL"])
@@ -149,6 +151,41 @@ def test_table_suffix_overrides_env_prefix(tool: str, extension: str, tmp_path: 
         assert result["findings"][0]["start"] == body.index(address)
         assert result["findings"][0]["end"] == body.index(address) + len(address)
     else:
+        replacement = {
+            "datafog_redact": "[EMAIL]",
+            "datafog_mask": "*" * len(address),
+            "datafog_remove": "",
+        }[tool]
         copied = Path(result["output_path"]).read_text()
-        assert "customer=" not in copied
+        assert copied == f'email\n"customer={replacement}"\n'
         assert address not in copied
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+@pytest.mark.parametrize("extension", ["csv", "tsv"])
+def test_table_cells_use_text_boundaries_under_an_env_prefix(
+    tool: str, extension: str, tmp_path: Path
+) -> None:
+    """
+    A table named like an ENV file is still matched with plain-text boundaries.
+
+    A dotted key tells the two apart on core 1.4 and later: plain text trims
+    "my.key=" as a label, where ENV boundaries would report the whole cell.
+    """
+    address = "tag@example.com"
+    body = f"email\nmy.key={address}\n"
+    source = tmp_path / f".env.{extension}"
+    source.write_text(body)
+    result = call(tool, source, entity_types=["EMAIL"])
+    assert result["counts"] == {"EMAIL": 1}
+    if tool == "datafog_scan":
+        assert result["findings"][0]["start"] == body.index(address)
+        assert result["findings"][0]["end"] == body.index(address) + len(address)
+    else:
+        replacement = {
+            "datafog_redact": "[EMAIL]",
+            "datafog_mask": "*" * len(address),
+            "datafog_remove": "",
+        }[tool]
+        copied = Path(result["output_path"]).read_text()
+        assert copied == f'email\n"my.key={replacement}"\n'
