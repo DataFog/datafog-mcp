@@ -150,18 +150,19 @@ async def datafog_policy(path: str | None = None) -> dict[str, Any]:
       a vault location; the location itself is never returned.
     """
     with _contained():
+        try:
+            has_vault = vault_configured()
+            # The roots file can change after startup. Check before anything
+            # reads or reports a root, so no answer names a root that the
+            # vault covers.
+            check_vault_against_roots()
+        except VaultConfigError as exc:
+            raise ToolError(str(exc)) from None
         current = _request_policy()
         try:
             roots = allowed_roots()
             resolved = resolve_input(path) if path is not None else None
         except PathNotAllowed as exc:
-            raise ToolError(str(exc)) from None
-        try:
-            has_vault = vault_configured()
-            # The roots file can change after startup; never list a root
-            # that the vault covers.
-            check_vault_against_roots()
-        except VaultConfigError as exc:
             raise ToolError(str(exc)) from None
         result: dict[str, Any] = {
             "advisory": True,

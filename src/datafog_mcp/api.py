@@ -22,16 +22,21 @@ What this interface returns, and what it does not:
   holds, and Policy.allowlist_counts gives a count per entity type. The
   values are absent from the policy's repr() and str() and from every error
   message. Policy.allow_exact does hold them in memory in order to match:
-  never serialize or log that attribute.
+  never serialize or log its contents. Each entry prints as a count, and
+  so do its copy() and set-operator results; iterating or converting an
+  entry gives the plain values.
 - Policy, table, overlap, and vault errors (PolicyFileError, CsvError,
   OverlapConflict, VaultConfigError) have messages written to be shown: they
   hold no file content, no allowlist value, no policy path, and no vault
-  location. So does the ValueError process_text raises for an unknown
-  input_format or strategy, which lists the allowed values only.
+  location. So do the ValueError process_text raises for an unknown
+  input_format or strategy and the one ScanConfig raises for an unsupported
+  entity type, which list the allowed values and never the rejected one.
 - Path and read errors (PathNotAllowed, RootPolicyError, ReadError) name the
   path involved and the allowed roots, as the server's tool errors do. A
-  filename can identify a person on its own. The exception is a path inside
-  the vault, which is refused without naming it.
+  filename can identify a person on its own. An outside-roots refusal names
+  the path as requested, not where a symlink leads. A path inside both an
+  allowed root and the vault is refused without naming it, and while the
+  vault covers an allowed root every path is refused without naming a root.
 - vault_dir returns the configured location to the calling program. The MCP
   server reports only whether one is configured. resolve_input and
   read_text_file refuse every path inside the vault.

@@ -24,6 +24,8 @@ from typing import Any
 
 import pytest
 from fastmcp import Client
+from packaging.requirements import Requirement
+from packaging.version import Version
 
 from datafog_mcp.server import mcp
 
@@ -270,19 +272,70 @@ def expected_copy(case: Case, tool: str) -> str:
     return "".join(piece + filler for piece, filler in zip(pieces, [*fill, ""], strict=True))
 
 
+def declared_core_requirement() -> Requirement:
+    """
+    Read the datafog-core requirement pyproject.toml declares.
+
+    A regex rather than tomllib, which Python 3.10 lacks.
+
+    Returns:
+      The parsed requirement, with its version specifiers.
+    """
+    declared = re.search(r'"(datafog-core[^"]*)"', PYPROJECT.read_text(encoding="utf-8"))
+    assert declared, "pyproject.toml declares no datafog-core requirement"
+    return Requirement(declared.group(1))
+
+
 def test_installed_core_is_the_one_minor_the_server_accepts() -> None:
     """
-    A resolution outside datafog-core 1.7.x is caught before any other test.
+    A resolution outside the accepted datafog-core minor is caught first.
 
     Each core minor can change what a scan finds, so the server accepts one
-    minor at a time. 1.5.0 and 1.6.0 in particular miss the values below.
+    minor at a time: pyproject.toml declares a floor and caps the range at
+    the next minor. The accepted line is read from that declaration, so this
+    test and the dependency cannot disagree. Any release of the line passes,
+    including a patch, pre-, post- or development release above the floor.
     """
-    declared = re.search(r'"datafog-core([^"]*)"', PYPROJECT.read_text(encoding="utf-8"))
-    assert declared, "pyproject.toml declares no datafog-core requirement"
-    assert declared.group(1) == ">=1.7.0,<1.8"
+    specifiers = {
+        item.operator: Version(item.version) for item in declared_core_requirement().specifier
+    }
+    assert set(specifiers) == {">=", "<"}, "expected a floor and an upper cap"
+    floor, cap = specifiers[">="], specifiers["<"]
+    major, minor = floor.release[:2]
+    assert cap.release == (major, minor + 1), "the cap must be the next minor"
+    # This module pins what the 1.7 line finds; a new line needs a new review.
+    assert (major, minor) == (1, 7)
 
-    installed = version("datafog-core")
-    assert re.fullmatch(r"1\.7\.\d+", installed), installed
+    installed = Version(version("datafog-core"))
+    assert installed.release[:2] == (major, minor), installed
+    assert declared_core_requirement().specifier.contains(installed, prereleases=True), installed
+
+
+@pytest.mark.parametrize(
+    ("candidate", "accepted"),
+    [
+        ("1.7.0", True),
+        ("1.7.1", True),
+        ("1.7.12", True),
+        ("1.7.1rc1", True),
+        ("1.7.1.dev3", True),
+        ("1.7.0.post1", True),
+        ("1.7.2+local.1", True),
+        ("1.7.0rc1", False),
+        ("1.6.9", False),
+        ("1.8.0", False),
+        ("1.8.0.dev1", False),
+        ("1.8.0rc1", False),
+        ("2.0.0", False),
+    ],
+)
+def test_declared_range_admits_the_whole_1_7_line_and_nothing_else(
+    candidate: str, accepted: bool
+) -> None:
+    """Patch, pre-, post- and development releases of 1.7 above the floor are in range."""
+    specifier = declared_core_requirement().specifier
+
+    assert specifier.contains(Version(candidate), prereleases=True) is accepted
 
 
 @pytest.mark.parametrize("tool", ALL_TOOLS)
