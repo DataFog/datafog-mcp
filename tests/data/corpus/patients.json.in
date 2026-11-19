@@ -1,0 +1,29 @@
+{
+  "export": "clinic-portal",
+  "generated_at": "2026-09-14T08:15:00Z",
+  "patients": [
+    {
+      "id": 501,
+      "name": "Zoë Müller",
+      "email": "[[EMAIL|zoe.mueller@example.de]]",
+      "phone": "[[PHONE|+1 (503) 555-0176]]",
+      "birth_date": "[[DATE|1962-11-02]]",
+      "address": {"street": "1200 SE Hawthorne Blvd", "city": "Portland", "state": "OR", "zip": "[[ZIP_CODE|97214]]"},
+      "insurance": {"plan": "PPO-2", "member_ssn": "[[SSN|601-44-2198]]"},
+      "provider": {"name": "Dr. Ana Lima", "npi": "[[NPI|1245319599]]", "referral": "NPI: [[NPI|1245319599]]"},
+      "portal": {"id_token": "[[JWT|{{jwt}}]]"},
+      "notes": "Prefers text 📱 at [[PHONE|503-555-0176]]; follow-up visit on [[DATE|2026-09-10]]."
+    },
+    {
+      "id": 502,
+      "name": "山田 花子",
+      "email": "[[EMAIL|hanako.yamada@example.jp]]",
+      "phone": "[[PHONE|(312) 555-0188]]",
+      "birth_date": "[[DATE|04/09/1958]]",
+      "address": {"street": "88 W Schiller St", "city": "Chicago", "state": "IL", "zip": "[[ZIP_CODE|60610]]"},
+      "insurance": {"plan": "HMO-1", "member_ssn": "[[SSN|448-21-9076]]"},
+      "provider": {"name": "Dr. Ken Ito", "npi": "[[NPI|1679576722]]"},
+      "notes": "Interpreter needed (日本語). Allergies: none on file."
+    }
+  ]
+}
